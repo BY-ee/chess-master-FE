@@ -33,56 +33,46 @@ const Game = () => {
         }
     };
 
-    const onDrop = (sourceSquare: string, targetSquare: string) => {
-        console.log(`[DEBUG] onDrop called: ${sourceSquare} -> ${targetSquare}`);
-        console.log(`[DEBUG] Current Turn: ${game.turn()}`);
-        console.log(`[DEBUG] Is Game Over: ${game.isGameOver()}`);
-
-        if (game.turn() !== 'w' || game.isGameOver()) {
-            console.warn("[DEBUG] Move rejected: Not White's turn or Game Over");
-            return false;
+    // AI Turn Logic
+  useEffect(() => {
+    if (game.turn() === 'b' && !game.isGameOver()) {
+      const timeoutId = setTimeout(() => {
+        const aiMove = getBestMove(game);
+        if (aiMove) {
+          makeAMove(aiMove);
         }
+      }, 300);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [game]);
 
-        // Only add promotion if it's a pawn moving to the last rank
-        const piece = game.get(sourceSquare as any);
-        const isPromotion =
-            piece?.type === 'p' &&
-            sourceSquare[1] === '7' &&
-            targetSquare[1] === '8';
+  const onDrop = (sourceSquare: string, targetSquare: string) => {
+    if (game.turn() !== 'w' || game.isGameOver()) return false;
 
-        const moveData: { from: string; to: string; promotion?: string } = {
-            from: sourceSquare,
-            to: targetSquare,
-        };
+    // Only add promotion if it's a pawn moving to the last rank
+    const piece = game.get(sourceSquare as any);
+    const isPromotion = 
+      piece?.type === 'p' && 
+      sourceSquare[1] === '7' && 
+      targetSquare[1] === '8';
 
-        if (isPromotion) {
-            moveData.promotion = 'q';
-        }
-
-        console.log("[DEBUG] Attempting move with data:", moveData);
-
-        const move = makeAMove(moveData);
-
-        if (move === null) {
-            console.error("[DEBUG] Move failed (Illegal) in chess.js:", moveData);
-            return false;
-        }
-
-        console.log("[DEBUG] Move successful:", move);
-
-        // AI Turn
-        setTimeout(() => {
-            if (!game.isGameOver()) {
-                const aiMove = getBestMove(game);
-                if (aiMove) {
-                    console.log("[DEBUG] AI Move:", aiMove);
-                    makeAMove(aiMove);
-                }
-            }
-        }, 300);
-
-        return true;
+    const moveData: { from: string; to: string; promotion?: string } = {
+      from: sourceSquare,
+      to: targetSquare,
     };
+
+    if (isPromotion) {
+      moveData.promotion = 'q';
+    }
+
+    const move = makeAMove(moveData);
+
+    if (move === null) {
+      return false;
+    }
+
+    return true;
+  };
 
     const resetGame = () => {
         setGame(new Chess());
