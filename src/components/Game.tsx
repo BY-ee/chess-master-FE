@@ -17,21 +17,8 @@ const Game = () => {
             } else {
                 setGameStatus('Game Over');
             }
-            return;
-        }
-
-        setGameStatus('');
-
-        // AI Turn Logic
-        if (game.turn() === 'b') {
-            const timer = setTimeout(() => {
-                const aiMove = getBestMove(game);
-                if (aiMove) {
-                    console.log("[DEBUG] AI Move:", aiMove);
-                    makeAMove(aiMove);
-                }
-            }, 300);
-            return () => clearTimeout(timer);
+        } else {
+            setGameStatus('');
         }
     }, [game]);
 
@@ -48,6 +35,8 @@ const Game = () => {
 
     const onDrop = (sourceSquare: string, targetSquare: string) => {
         console.log(`[DEBUG] onDrop called: ${sourceSquare} -> ${targetSquare}`);
+        console.log(`[DEBUG] Current Turn: ${game.turn()}`);
+        console.log(`[DEBUG] Is Game Over: ${game.isGameOver()}`);
 
         if (game.turn() !== 'w' || game.isGameOver()) {
             console.warn("[DEBUG] Move rejected: Not White's turn or Game Over");
@@ -80,6 +69,18 @@ const Game = () => {
         }
 
         console.log("[DEBUG] Move successful:", move);
+
+        // AI Turn
+        setTimeout(() => {
+            if (!game.isGameOver()) {
+                const aiMove = getBestMove(game);
+                if (aiMove) {
+                    console.log("[DEBUG] AI Move:", aiMove);
+                    makeAMove(aiMove);
+                }
+            }
+        }, 300);
+
         return true;
     };
 
@@ -109,9 +110,8 @@ const Game = () => {
                 </button>
             </div>
 
-            <div className="w-full max-w-[600px] aspect-square shadow-2xl rounded-lg overflow-hidden border-4 border-zinc-800 relative z-10">
+            <div className="w-full max-w-[600px] aspect-square shadow-2xl rounded-lg overflow-hidden border-4 border-zinc-800">
                 <ChessboardComponent
-                    id="BasicBoard"
                     position={game.fen()}
                     onPieceDrop={onDrop}
                     customDarkSquareStyle={{ backgroundColor: '#769656' }}
