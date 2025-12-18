@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { getBookMove } from './openingBook';
 
 // --- Evaluation Constants ---
 const PIECE_VALUES: Record<string, number> = {
@@ -197,6 +198,16 @@ export const getBestMove = (game: Chess): string | null => {
   
   const potentialMoves = game.moves();
   if (potentialMoves.length === 0) return null;
+
+  // 1. Check Opening Book
+  const bookMoveSan = getBookMove(game.fen());
+  if (bookMoveSan) {
+      // Verify validity strictly
+      if (potentialMoves.includes(bookMoveSan)) {
+          console.log(`[AI] Book Move: ${bookMoveSan}`);
+          return bookMoveSan;
+      }
+  }
 
   let bestMove = null;
   // White maximizes score, Black minimizes score.
