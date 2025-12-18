@@ -92,6 +92,17 @@ const TABLE_MAP: Record<string, number[][]> = {
 // --- Helper Functions ---
 
 const evaluateBoard = (game: Chess): number => {
+  if (game.isGameOver()) {
+    if (game.isCheckmate()) {
+      // If White Turn -> White is Mated -> Black Wins -> Score is Minimum (-100000)
+      // If Black Turn -> Black is Mated -> White Wins -> Score is Maximum (+100000)
+      return game.turn() === 'w' ? -100000 : 100000;
+    }
+    if (game.isDraw()) {
+      return 0;
+    }
+  }
+
   let score = 0;
   const board = game.board();
 
