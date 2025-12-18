@@ -12,6 +12,9 @@ const Game = () => {
     const [history, setHistory] = useState<string[]>([new Chess().fen()]);
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [gameStatus, setGameStatus] = useState<string>('');
+    
+    // User Color State (Randomized on start)
+    const [userColor, setUserColor] = useState<'w' | 'b'>(() => Math.random() < 0.5 ? 'w' : 'b');
 
     // Refs for keyboard handling to avoid stale closures
     const gameRef = useRef(game);
@@ -28,7 +31,9 @@ const Game = () => {
     useEffect(() => {
         if (game.isGameOver()) {
             if (game.isCheckmate()) {
-                setGameStatus(`Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins!`);
+                const winnerColor = game.turn() === 'w' ? 'Black' : 'White';
+                const isUserWinner = (game.turn() === 'w' && userColor === 'b') || (game.turn() === 'b' && userColor === 'w');
+                setGameStatus(`Checkmate! ${winnerColor} wins! ${isUserWinner ? '(You Win!)' : '(You Lose!)'}`);
             } else if (game.isDraw()) {
                 setGameStatus('Draw!');
             } else {
@@ -37,7 +42,7 @@ const Game = () => {
         } else {
             setGameStatus('');
         }
-    }, [game]);
+    }, [game, userColor]);
 
     // Keyboard Navigation
     useEffect(() => {
@@ -74,31 +79,34 @@ const Game = () => {
 
     // AI Turn Logic
     useEffect(() => {
-      // Only run AI if it's Black's turn, game not over, AND we are viewing the latest move.
+      // Run AI if it's NOT user's turn, game not over, AND we are viewing the latest move.
       const isLatestMove = currentMoveIndex === history.length - 1;
+      const isAiTurn = game.turn() !== userColor;
 
-      if (game.turn() === 'b' && !game.isGameOver() && isLatestMove) {
+      if (isAiTurn && !game.isGameOver() && isLatestMove) {
+        // Add a small delay for realism
         const timeoutId = setTimeout(() => {
           const aiMove = getBestMove(game);
           if (aiMove) {
             safeMakeAMove(aiMove);
           }
-        }, 300);
+        }, 500);
         return () => clearTimeout(timeoutId);
       }
-    }, [game, currentMoveIndex, history]);
+    }, [game, currentMoveIndex, history, userColor]);
 
     const onDrop = (sourceSquare: string, targetSquare: string) => {
         // Prevent moves if reviewing past history
         if (currentMoveIndex !== history.length - 1) return false;
         
-        if (game.turn() !== 'w' || game.isGameOver()) return false;
+        // Prevent moves if it's not user's turn or game is over
+        if (game.turn() !== userColor || game.isGameOver()) return false;
 
         const piece = game.get(sourceSquare as any);
         const isPromotion = 
             piece?.type === 'p' && 
-            sourceSquare[1] === '7' && 
-            targetSquare[1] === '8';
+            ((userColor === 'w' && sourceSquare[1] === '7' && targetSquare[1] === '8') ||
+             (userColor === 'b' && sourceSquare[1] === '2' && targetSquare[1] === '1'));
 
         const moveData: { from: string; to: string; promotion?: string } = {
             from: sourceSquare,
@@ -120,6 +128,8 @@ const Game = () => {
         setHistory([newGame.fen()]);
         setCurrentMoveIndex(0);
         setGameStatus('');
+        // Re-randomize user color
+        setUserColor(Math.random() < 0.5 ? 'w' : 'b');
     };
 
     const navigateHistory = (direction: 'back' | 'forward') => {
@@ -166,7 +176,7 @@ const Game = () => {
                     <div className="flex items-center gap-2">
                         <div className={`w-3 h-3 rounded-full ${game.turn() === 'w' ? 'bg-green-500' : 'bg-gray-500'}`} />
                         <span className="font-semibold text-lg">
-                            {gameStatus || (game.turn() === 'w' ? "Your Turn (White)" : "AI Thinking...")}
+                            {gameStatus || (game.turn() === userColor ? `Your Turn (${userColor === 'w' ? 'White' : 'Black'})` : "AI Thinking...")}
                         </span>
                     </div>
                     <button 
@@ -182,10 +192,11 @@ const Game = () => {
                     <ChessboardComponent 
                         position={displayFen} 
                         onPieceDrop={onDrop}
+                        boardOrientation={userColor === 'w' ? 'white' : 'black'}
                         customDarkSquareStyle={{ backgroundColor: '#769656' }}
                         customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
                         animationDuration={200}
-                        arePiecesDraggable={currentMoveIndex === history.length - 1} // Only drag if latest
+                        arePiecesDraggable={currentMoveIndex === history.length - 1 && game.turn() === userColor} // Only drag if latest and user turn
                     />
                     
                     {/* Replay Overlay Indicator */}
@@ -258,7 +269,7 @@ const Game = () => {
                                             currentMoveIndex === pair.blackIndex 
                                                 ? 'bg-yellow-500/20 text-yellow-200 font-medium' 
                                                 : 'hover:bg-white/5 text-zinc-300'
-                                        }`}
+                                    }`}
                                     >
                                         View Black
                                     </button>
@@ -270,7 +281,8 @@ const Game = () => {
 
                 {/* Debug Info in Sidebar Bottom */}
                 <div className="p-3 text-[10px] font-mono text-zinc-500 border-t border-white/10 break-all bg-black/20">
-                    FEN: {displayFen.split(' ')[0]}...
+                    FEN: {displayFen.split(' ')[0]}... <br/>
+                    Playing as: {userColor === 'w' ? 'White' : 'Black'}
                 </div>
             </div>
             
