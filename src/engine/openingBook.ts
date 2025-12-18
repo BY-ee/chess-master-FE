@@ -112,11 +112,11 @@ const OPENING_BOOK: Record<string, string[]> = {
 
   // ------------ 3. (White) ------------ //
   // 1.e4 e6 2. d4 d5 (French Defense)
-  'rnbqkbnr/pppp1ppp/4p3/3p4/3PP3/8/PPP2PPP/RNBQKBNR w KQkq': [
-    'e5',    // Advanced
-    'Nc3',   // Classical
-    'Nd2',   // Modern
-    'exd5',  // Exchange
+  'rnbqkbnr/ppp2ppp/4p3/3p4/3PP3/8/PPP2PPP/RNBQKBNR w KQkq': [
+    'e5', 'e5',     // Advanced
+    'exd5', 'exd5', // Exchange
+    'Nc3', 'Nc3',   // Classical
+    'Nd2',          // Tarrasch
   ],
 };
 
