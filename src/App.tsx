@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/auth/LoginPage';
 import LobbyPage from './pages/game/LobbyPage';
 import GamePage from './pages/game/GamePage';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './store/useAuthStore';
 
@@ -15,8 +16,12 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/lobby" element={<LobbyPage />} />
-          <Route path="/game/:mode" element={<GamePage />} />
+          
+          <Route element={<ProtectedRoute />}>
+            <Route path="/lobby" element={<LobbyPage />} />
+            <Route path="/game/:mode" element={<GamePage />} />
+          </Route>
+
           <Route path="/" element={<Navigate to={token ? "/lobby" : "/login"} replace />} />
         </Routes>
       </BrowserRouter>
