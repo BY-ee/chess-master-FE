@@ -3,10 +3,13 @@ import LoginPage from './pages/auth/LoginPage';
 import LobbyPage from './pages/game/LobbyPage';
 import GamePage from './pages/game/GamePage';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useAuthStore } from './store/useAuthStore';
 
 const queryClient = new QueryClient();
 
 function App() {
+  const token = useAuthStore((state) => state.token);
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
@@ -14,7 +17,7 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/lobby" element={<LobbyPage />} />
           <Route path="/game/:mode" element={<GamePage />} />
-          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="/" element={<Navigate to={token ? "/lobby" : "/login"} replace />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>
