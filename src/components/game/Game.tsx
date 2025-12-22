@@ -1,10 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
-import { getBestMove } from '../engine/ai';
+import { getBestMove } from '../../engine/ai';
 import { RefreshCw, Trophy, AlertTriangle, ChevronLeft, ChevronRight, History } from 'lucide-react';
+import { useSocket } from '../../hooks/useSocket';
 
-const Game = () => {
+interface GameProps {
+    mode: 'ai' | 'online';
+}
+
+const Game = ({ mode }: GameProps) => {
     // Game Logic State
     const [game, setGame] = useState(new Chess());
     
@@ -13,8 +18,11 @@ const Game = () => {
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [gameStatus, setGameStatus] = useState<string>('');
     
-    // User Color State (Randomized on start)
+    // User Color State (Randomized on start for AI, determined by server for Online)
     const [userColor, setUserColor] = useState<'w' | 'b'>(() => Math.random() < 0.5 ? 'w' : 'b');
+
+    // Socket
+    const socket = useSocket();
 
     // Refs for keyboard handling to avoid stale closures
     const gameRef = useRef(game);
@@ -44,6 +52,26 @@ const Game = () => {
         }
     }, [game, userColor]);
 
+    // Socket Listeners (Online Mode)
+    useEffect(() => {
+        if (mode === 'online' && socket) {
+            socket.on('move', (move: { from: string; to: string; promotion?: string }) => {
+                // Apply opponent's move
+                safeMakeAMove(move);
+            });
+
+            socket.on('game_start', (data: { color: 'w' | 'b' }) => {
+                setUserColor(data.color);
+                resetGame(false); // Reset but keep color
+            });
+
+            return () => {
+                socket.off('move');
+                socket.off('game_start');
+            };
+        }
+    }, [mode, socket]);
+
     // Keyboard Navigation
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -60,12 +88,12 @@ const Game = () => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    const safeMakeAMove = (move: string | { from: string; to: string; promotion?: string }) => {
+    const safeMakeAMove = (move: string | { from: string; to: string; promotion?: string }, isSocketEvents = false) => {
         try {
-            const gameCopy = new Chess(game.fen());
+            const gameCopy = new Chess(gameRef.current.fen());
             const result = gameCopy.move(move);
             
-            const newHistory = [...history.slice(0, currentMoveIndex + 1), { fen: gameCopy.fen(), san: result.san }];
+            const newHistory = [...historyRef.current.slice(0, indexRef.current + 1), { fen: gameCopy.fen(), san: result.san }];
             
             setGame(gameCopy);
             setHistory(newHistory);
@@ -79,6 +107,8 @@ const Game = () => {
 
     // AI Turn Logic
     useEffect(() => {
+      if (mode !== 'ai') return;
+
       // Run AI if it's NOT user's turn, game not over, AND we are viewing the latest move.
       const isLatestMove = currentMoveIndex === history.length - 1;
       const isAiTurn = game.turn() !== userColor;
@@ -93,7 +123,7 @@ const Game = () => {
         }, 500);
         return () => clearTimeout(timeoutId);
       }
-    }, [game, currentMoveIndex, history, userColor]);
+    }, [game, currentMoveIndex, history, userColor, mode]);
 
     const onDrop = (sourceSquare: string, targetSquare: string) => {
         // Prevent moves if reviewing past history
@@ -119,17 +149,22 @@ const Game = () => {
 
         const move = safeMakeAMove(moveData);
 
+        if (move && mode === 'online' && socket) {
+            socket.emit('move', moveData);
+        }
+
         return move !== null;
     };
 
-    const resetGame = () => {
+    const resetGame = (randomizeColor = true) => {
         const newGame = new Chess();
         setGame(newGame);
         setHistory([{ fen: newGame.fen(), san: '' }]);
         setCurrentMoveIndex(0);
         setGameStatus('');
-        // Re-randomize user color
-        setUserColor(Math.random() < 0.5 ? 'w' : 'b');
+        if (randomizeColor && mode === 'ai') {
+             setUserColor(Math.random() < 0.5 ? 'w' : 'b');
+        }
     };
 
     const navigateHistory = (direction: 'back' | 'forward') => {
@@ -176,11 +211,11 @@ const Game = () => {
                     <div className="flex items-center gap-2">
                         <div className={`w-3 h-3 rounded-full ${game.turn() === 'w' ? 'bg-green-500' : 'bg-gray-500'}`} />
                         <span className="font-semibold text-lg">
-                            {gameStatus || (game.turn() === userColor ? `Your Turn (${userColor === 'w' ? 'White' : 'Black'})` : "AI Thinking...")}
+                            {gameStatus || (game.turn() === userColor ? `Your Turn (${userColor === 'w' ? 'White' : 'Black'})` : (mode === 'ai' ? "AI Thinking..." : "Opponent's Turn"))}
                         </span>
                     </div>
                     <button 
-                        onClick={resetGame}
+                        onClick={() => resetGame(true)}
                         className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors font-medium"
                     >
                         <RefreshCw size={18} />
@@ -275,7 +310,8 @@ const Game = () => {
                 {/* Debug Info in Sidebar Bottom */}
                 <div className="p-3 text-[10px] font-mono text-zinc-500 border-t border-white/10 break-all bg-black/20">
                     FEN: {displayFen.split(' ')[0]}... <br/>
-                    Playing as: {userColor === 'w' ? 'White' : 'Black'}
+                    Playing as: {userColor === 'w' ? 'White' : 'Black'} <br/>
+                    Mode: {mode}
                 </div>
             </div>
             
@@ -285,7 +321,7 @@ const Game = () => {
                     {game.isCheckmate() ? <Trophy size={48} className="text-yellow-500" /> : <AlertTriangle size={48} className="text-zinc-400" />}
                     <h2 className="text-2xl font-bold">{gameStatus}</h2>
                     <button 
-                        onClick={resetGame}
+                        onClick={() => resetGame(true)}
                         className="px-6 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold text-lg transition-transform hover:scale-105"
                     >
                         Play Again

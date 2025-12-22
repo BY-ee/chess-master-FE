@@ -1,21 +1,23 @@
-import Game from './components/Game';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import LoginPage from './pages/auth/LoginPage';
+import LobbyPage from './pages/game/LobbyPage';
+import GamePage from './pages/game/GamePage';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient();
 
 function App() {
   return (
-    <div className="min-h-screen bg-zinc-900 flex flex-col items-center py-10">
-      <header className="mb-8 text-center">
-        <h1 className="text-4xl font-bold text-white mb-2 tracking-tight">Chess Master</h1>
-        <p className="text-zinc-400">Challenge the AI in a classic game of strategy</p>
-      </header>
-
-      <main className="w-full flex justify-center px-4">
-        <Game />
-      </main>
-
-      <footer className="mt-12 text-zinc-500 text-sm">
-        <p>Built with React, Chess.js & Tailwind</p>
-      </footer>
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/lobby" element={<LobbyPage />} />
+          <Route path="/game/:mode" element={<GamePage />} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </QueryClientProvider>
   );
 }
 
