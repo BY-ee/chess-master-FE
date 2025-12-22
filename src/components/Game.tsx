@@ -9,7 +9,7 @@ const Game = () => {
     const [game, setGame] = useState(new Chess());
     
     // View State
-    const [history, setHistory] = useState<string[]>([new Chess().fen()]);
+    const [history, setHistory] = useState<{ fen: string; san: string }[]>([{ fen: new Chess().fen(), san: '' }]);
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [gameStatus, setGameStatus] = useState<string>('');
     
@@ -65,7 +65,7 @@ const Game = () => {
             const gameCopy = new Chess(game.fen());
             const result = gameCopy.move(move);
             
-            const newHistory = [...history.slice(0, currentMoveIndex + 1), gameCopy.fen()];
+            const newHistory = [...history.slice(0, currentMoveIndex + 1), { fen: gameCopy.fen(), san: result.san }];
             
             setGame(gameCopy);
             setHistory(newHistory);
@@ -125,7 +125,7 @@ const Game = () => {
     const resetGame = () => {
         const newGame = new Chess();
         setGame(newGame);
-        setHistory([newGame.fen()]);
+        setHistory([{ fen: newGame.fen(), san: '' }]);
         setCurrentMoveIndex(0);
         setGameStatus('');
         // Re-randomize user color
@@ -163,7 +163,7 @@ const Game = () => {
 
     // Get current generic FEN for display
     // We use the FEN from history based on the current index
-    const displayFen = history[currentMoveIndex];
+    const displayFen = history[currentMoveIndex].fen;
 
     // Cast to any to avoid strict type checking issues with props
     const ChessboardComponent = Chessboard as any;
@@ -253,14 +253,7 @@ const Game = () => {
                                             : 'hover:bg-white/5 text-zinc-300'
                                     }`}
                                 >
-                                    {/* We intentionally don't display SAN (e.g. e4) here because extracting it from history FENs is complex without storing it. 
-                                        For this prototype, we'll label them "White" and "Black" or just show the turn number, 
-                                        OR we can improve 'safeMakeAMove' to store the SAN string.
-                                        
-                                        Let's start simple: Highlight the active turn.
-                                        Ideally we want "e4". To get that, we need to store the SAN from move() result.
-                                     */}
-                                    View White
+                                    {pair.white.san}
                                 </button>
                                 {pair.black && (
                                     <button 
@@ -271,7 +264,7 @@ const Game = () => {
                                                 : 'hover:bg-white/5 text-zinc-300'
                                     }`}
                                     >
-                                        View Black
+                                        {pair.black.san}
                                     </button>
                                 )}
                             </div>
