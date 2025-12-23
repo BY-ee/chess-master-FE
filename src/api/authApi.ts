@@ -5,26 +5,40 @@ export interface LoginRequest {
   password?: string;
 }
 
+export interface SignupRequest extends LoginRequest {
+  email: string;
+}
+
+export interface UserProfile {
+  id: string;
+  username: string;
+  email?: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+}
+
 export interface AuthResponse {
   accessToken: string;
-  username: string;
-  id: string;
+  user?: UserProfile; 
 }
 
 export const authApi = {
-  login: async (credentials: LoginRequest): Promise<AuthResponse> => {
-    const response = await axiosInstance.post<AuthResponse>('/auth/login', credentials);
-    return response.data;
+  login: async (credentials: LoginRequest): Promise<string> => {
+    // Expecting { access_token: "..." } from BE
+    const response = await axiosInstance.post<LoginResponse>('/auth/login', credentials);
+    return response.data.access_token; 
   },
 
-  signup: async (credentials: LoginRequest): Promise<AuthResponse> => {
-    const response = await axiosInstance.post<AuthResponse>('/auth/signup', credentials);
+  signup: async (data: SignupRequest): Promise<UserProfile> => {
+    // Expecting User object from BE
+    const response = await axiosInstance.post<UserProfile>('/auth/signup', data);
     return response.data;
   },
   
-  // Future proofing for verify/me endpoint
-  getMe: async (): Promise<AuthResponse> => {
-      const response = await axiosInstance.get<AuthResponse>('/auth/profile');
+  getMe: async (): Promise<UserProfile> => {
+      const response = await axiosInstance.get<UserProfile>('/auth/profile');
       return response.data;
   }
 };

@@ -6,6 +6,7 @@ import { authApi } from '../../api/authApi';
 const SignupPage = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [email, setEmail] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -18,10 +19,18 @@ const SignupPage = () => {
         setIsLoading(true);
 
         try {
-            // LoginRequest 타입 재사용 (username, password)
-            const data = await authApi.signup({ username, password });
-            // 회원가입 성공 시 바로 로그인 처리까지 진행
-            login({ id: data.id, username: data.username }, data.accessToken);
+            // 1. Signup (Returns User Profile)
+            await authApi.signup({ username, password, email });
+            
+            // 2. Auto Login (Returns Access Token)
+            const token = await authApi.login({ username, password });
+            localStorage.setItem('token', token);
+            
+            // 3. Get Full Profile (ensure we have ID and details)
+            const user = await authApi.getMe();
+
+            // 4. Update Store
+            login({ id: user.id, username: user.username }, token);
             navigate('/lobby');
         } catch (err: any) {
             console.error('Signup failed:', err);
@@ -42,6 +51,17 @@ const SignupPage = () => {
                     </div>
                 )}
                 <form className="space-y-4" onSubmit={handleSubmit}>
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Email</label>
+                        <input 
+                            type="email" 
+                            className="w-full p-2 rounded bg-zinc-700 border border-zinc-600 focus:outline-none focus:border-green-500" 
+                            placeholder="Enter your email" 
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                        />
+                    </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Username</label>
                         <input 

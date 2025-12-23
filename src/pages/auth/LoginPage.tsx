@@ -18,8 +18,10 @@ const LoginPage = () => {
         setIsLoading(true);
 
         try {
-            const data = await authApi.login({ username, password });
-            login({ id: data.id, username: data.username }, data.accessToken);
+            const token = await authApi.login({ username, password });
+            localStorage.setItem('token', token); // Ensure token is available for getMe()
+            const user = await authApi.getMe();
+            login({ id: user.id, username: user.username }, token);
             navigate('/lobby');
         } catch (err: any) {
             console.error('Login failed:', err);
