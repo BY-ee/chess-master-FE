@@ -2,12 +2,13 @@
 trigger: always_on
 ---
 
-# **개발이 시작/진행/완료될 때마다, 이하의 git branch convention과 git commit convention을 따라 항상 브랜치를 생성하고 커밋을 만들어야 합니다**.
+# **개발이 시작/진행/완료될 때마다, 이하의 git branch convention과 git commit convention을 따라 항상 브랜치를 생성하고 커밋을 만들어야 합니다.**
+# Git-flow 방식을 활용하며, 커밋 방식은 `/git-flow-commit` 워크플로우를 따릅니다.
 
 ## git branch convention은 Git-flow 전략을 따르도록 합니다.
 1. main: 운영 환경과 연동되는 브랜치 (**직접 commit & push 금지**, develop 브랜치만 활용하도록 함)
 2. develop: 개발 환경과 연동되는 브랜치 (**직접 commit & push 금지**)
-3. feature/*: 각 기능을 개발할 때 사용되는 브랜치
+3. feat/*: 각 기능을 개발할 때 사용되는 브랜치
 4. fix/*: 버그를 수정할 때 사용되는 브랜치
 5. hotfix/*: 긴급 수정이 필요할 때 사용되는 브랜치 (긴급한 수정건이 아닌 경우 fix 브랜치를 주로 활용하도록 함)
 
@@ -38,5 +39,3 @@ ex)
 3. Footer: 어떤 이슈에서 온 커밋인지, 이슈 발생인지, 혹은 해결인지 등의 참조 정보
 ex)
 Resolves: #1234
-
-## feature/*, fix/* 등의 브랜치에서 작업을 완료한 후에는, develop 브랜치에 **rebase-merge**를 진행하도록 합니다.

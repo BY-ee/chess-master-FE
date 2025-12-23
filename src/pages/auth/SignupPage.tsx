@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
 import { authApi } from '../../api/authApi';
 
-const LoginPage = () => {
+const SignupPage = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
@@ -18,12 +18,14 @@ const LoginPage = () => {
         setIsLoading(true);
 
         try {
-            const data = await authApi.login({ username, password });
+            // LoginRequest 타입 재사용 (username, password)
+            const data = await authApi.signup({ username, password });
+            // 회원가입 성공 시 바로 로그인 처리까지 진행
             login({ id: data.id, username: data.username }, data.accessToken);
             navigate('/lobby');
         } catch (err: any) {
-            console.error('Login failed:', err);
-            setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+            console.error('Signup failed:', err);
+            setError(err.response?.data?.message || 'Signup failed. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -33,7 +35,7 @@ const LoginPage = () => {
         <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-900 text-white">
             <h1 className="text-4xl font-bold mb-8">Chess Master</h1>
             <div className="p-8 bg-zinc-800 rounded-lg shadow-xl w-full max-w-md">
-                <h2 className="text-2xl font-semibold mb-6">Login</h2>
+                <h2 className="text-2xl font-semibold mb-6">Sign Up</h2>
                 {error && (
                     <div className="mb-4 p-3 bg-red-500/10 border border-red-500 rounded text-red-500 text-sm">
                         {error}
@@ -45,7 +47,7 @@ const LoginPage = () => {
                         <input 
                             type="text" 
                             className="w-full p-2 rounded bg-zinc-700 border border-zinc-600 focus:outline-none focus:border-green-500" 
-                            placeholder="Username" 
+                            placeholder="Choose a username" 
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             required
@@ -56,7 +58,7 @@ const LoginPage = () => {
                         <input 
                             type="password" 
                             className="w-full p-2 rounded bg-zinc-700 border border-zinc-600 focus:outline-none focus:border-green-500" 
-                            placeholder="Password"
+                            placeholder="Choose a password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
@@ -71,10 +73,10 @@ const LoginPage = () => {
                                 : 'bg-green-600 hover:bg-green-500'
                         }`}
                     >
-                        {isLoading ? 'Signing In...' : 'Sign In'}
+                        {isLoading ? 'Creating Account...' : 'Create Account'}
                     </button>
                     <div className="text-center text-sm text-zinc-400 mt-4">
-                         Don't have an account? <span className="text-green-400 cursor-pointer" onClick={() => navigate('/signup')}>Register</span>
+                         Already have an account? <span className="text-green-400 cursor-pointer" onClick={() => navigate('/login')}>Login</span>
                     </div>
                 </form>
             </div>
@@ -82,4 +84,4 @@ const LoginPage = () => {
     );
 };
 
-export default LoginPage;
+export default SignupPage;

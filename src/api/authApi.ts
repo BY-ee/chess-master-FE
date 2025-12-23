@@ -16,6 +16,11 @@ export const authApi = {
     const response = await axiosInstance.post<AuthResponse>('/auth/login', credentials);
     return response.data;
   },
+
+  signup: async (credentials: LoginRequest): Promise<AuthResponse> => {
+    const response = await axiosInstance.post<AuthResponse>('/auth/signup', credentials);
+    return response.data;
+  },
   
   // Future proofing for verify/me endpoint
   getMe: async (): Promise<AuthResponse> => {
