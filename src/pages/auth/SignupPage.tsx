@@ -39,8 +39,7 @@ const SignupPage = () => {
             if (Array.isArray(message)) {
                 messages = message;
             } else if (typeof message === 'string') {
-                // Split by comma to handle combined messages like "username error, password error"
-                messages = message.split(',').map(m => m.trim());
+                messages = [message];
             }
 
             messages.forEach((msg: string) => {
