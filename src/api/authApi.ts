@@ -19,11 +19,6 @@ export interface LoginResponse {
   access_token: string;
 }
 
-export interface AuthResponse {
-  accessToken: string;
-  user?: UserProfile; 
-}
-
 export const authApi = {
   login: async (credentials: LoginRequest): Promise<string> => {
     // Expecting { access_token: "..." } from BE
@@ -38,7 +33,7 @@ export const authApi = {
   },
   
   getMe: async (): Promise<UserProfile> => {
-      const response = await axiosInstance.get<UserProfile>('/auth/profile');
-      return response.data;
+    const response = await axiosInstance.get<UserProfile>('/auth/profile');
+    return response.data;
   }
 };
