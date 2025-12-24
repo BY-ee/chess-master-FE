@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
 import { authApi } from '../../api/authApi';
 
@@ -76,7 +76,7 @@ const LoginPage = () => {
                         {isLoading ? 'Signing In...' : 'Sign In'}
                     </button>
                     <div className="text-center text-sm text-zinc-400 mt-4">
-                         Don't have an account? <span className="text-green-400 cursor-pointer" onClick={() => navigate('/signup')}>Register</span>
+                        Don't have an account? <Link to="/signup" className="text-green-400 cursor-pointer">Register</Link>
                     </div>
                 </form>
             </div>
