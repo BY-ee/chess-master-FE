@@ -3,10 +3,13 @@ import { useAuthStore } from '../../store/useAuthStore';
 
 const ProtectedRoute = () => {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const token = useAuthStore((state) => state.token);
+  const isInitializing = useAuthStore((state) => state.isInitializing);
 
-  // You might want to check token validity here or just relying on presence
-  if (!isAuthenticated && !token) {
+  if (isInitializing) {
+    return <div className="flex justify-center items-center h-screen bg-zinc-900 text-white">Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
 

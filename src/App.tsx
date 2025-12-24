@@ -9,8 +9,36 @@ import { useAuthStore } from './store/useAuthStore';
 
 const queryClient = new QueryClient();
 
+import { useEffect } from 'react';
+import { authApi } from './api/authApi';
+
 function App() {
   const token = useAuthStore((state) => state.token);
+  const login = useAuthStore((state) => state.login);
+  const logout = useAuthStore((state) => state.logout);
+  const setInitializing = useAuthStore((state) => state.setInitializing);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const storedToken = localStorage.getItem('token');
+      if (!storedToken) {
+        setInitializing(false);
+        return;
+      }
+
+      try {
+        const user = await authApi.getMe();
+        login(user, storedToken);
+      } catch (error) {
+        console.error('Failed to restore auth:', error);
+        logout();
+      } finally {
+        setInitializing(false);
+      }
+    };
+
+    checkAuth();
+  }, [login, logout, setInitializing]);
 
   return (
     <QueryClientProvider client={queryClient}>
