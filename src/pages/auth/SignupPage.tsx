@@ -19,18 +19,11 @@ const SignupPage = () => {
         setIsLoading(true);
 
         try {
-            // 1. Signup (Returns User Profile)
-            await authApi.signup({ username, password, email });
+            // Optimized: Signup now returns token and user info directly
+            const { access_token, user } = await authApi.signup({ username, password, email });
             
-            // 2. Auto Login (Returns Access Token)
-            const token = await authApi.login({ username, password });
-            localStorage.setItem('token', token);
-            
-            // 3. Get Full Profile (ensure we have ID and details)
-            const user = await authApi.getMe();
-
-            // 4. Update Store
-            login({ id: user.id, username: user.username }, token);
+            // Update Store and Navigate
+            login(user, access_token);
             navigate('/lobby');
         } catch (err: any) {
             console.error('Signup failed:', err);

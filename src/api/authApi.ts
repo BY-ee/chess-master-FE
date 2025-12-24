@@ -19,6 +19,11 @@ export interface LoginResponse {
   access_token: string;
 }
 
+export interface SignupResponse {
+  access_token: string;
+  user: UserProfile;
+}
+
 export const authApi = {
   login: async (credentials: LoginRequest): Promise<string> => {
     // Expecting { access_token: "..." } from BE
@@ -26,9 +31,9 @@ export const authApi = {
     return response.data.access_token; 
   },
 
-  signup: async (data: SignupRequest): Promise<UserProfile> => {
-    // Expecting User object from BE
-    const response = await axiosInstance.post<UserProfile>('/auth/signup', data);
+  signup: async (data: SignupRequest): Promise<SignupResponse> => {
+    // Optimized: Returns { access_token, user } immediately
+    const response = await axiosInstance.post<SignupResponse>('/auth/signup', data);
     return response.data;
   },
   
