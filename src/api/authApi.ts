@@ -2,7 +2,7 @@ import axiosInstance from './axiosInstance';
 
 export interface LoginRequest {
   username: string;
-  password?: string;
+  password: string;
 }
 
 export interface SignupRequest extends LoginRequest {
