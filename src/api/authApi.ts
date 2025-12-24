@@ -37,8 +37,9 @@ export const authApi = {
     return response.data;
   },
   
-  getMe: async (): Promise<UserProfile> => {
-    const response = await axiosInstance.get<UserProfile>('/auth/profile');
+  getMe: async (token?: string): Promise<UserProfile> => {
+    const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+    const response = await axiosInstance.get<UserProfile>('/auth/profile', config);
     return response.data;
   }
 };

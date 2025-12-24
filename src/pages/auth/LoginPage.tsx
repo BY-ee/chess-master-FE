@@ -19,8 +19,7 @@ const LoginPage = () => {
 
         try {
             const token = await authApi.login({ username, password });
-            localStorage.setItem('token', token); // Ensure token is available for getMe()
-            const user = await authApi.getMe();
+            const user = await authApi.getMe(token);
             login({ id: user.id, username: user.username }, token);
             navigate('/lobby');
         } catch (err: any) {
