@@ -7,7 +7,8 @@ const SignupPage = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [email, setEmail] = useState('');
-    const [error, setError] = useState<string | null>(null);
+    const [fieldErrors, setFieldErrors] = useState<{ email?: string; username?: string; password?: string }>({});
+    const [globalError, setGlobalError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
     const navigate = useNavigate();
@@ -15,7 +16,8 @@ const SignupPage = () => {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError(null);
+        setFieldErrors({});
+        setGlobalError(null);
         setIsLoading(true);
 
         try {
@@ -27,7 +29,41 @@ const SignupPage = () => {
             navigate('/lobby');
         } catch (err: any) {
             console.error('Signup failed:', err);
-            setError(err.response?.data?.message || 'Signup failed. Please try again.');
+            const message = err.response?.data?.message;
+
+            const newFieldErrors: { email?: string; username?: string; password?: string } = {};
+            let hasFieldError = false;
+            
+            // Normalize message to an array of strings
+            let messages: string[] = [];
+            if (Array.isArray(message)) {
+                messages = message;
+            } else if (typeof message === 'string') {
+                // Split by comma to handle combined messages like "username error, password error"
+                messages = message.split(',').map(m => m.trim());
+            }
+
+            messages.forEach((msg: string) => {
+                const lowerMsg = msg.toLowerCase();
+                if (lowerMsg.includes('email')) {
+                    newFieldErrors.email = msg;
+                    hasFieldError = true;
+                }
+                if (lowerMsg.includes('username')) {
+                    newFieldErrors.username = msg;
+                    hasFieldError = true;
+                } 
+                if (lowerMsg.includes('password')) {
+                    newFieldErrors.password = msg;
+                    hasFieldError = true;
+                }
+            });
+
+            if (hasFieldError) {
+                setFieldErrors(newFieldErrors);
+            } else {
+                setGlobalError(typeof message === 'string' ? message : 'Signup failed. Please try again.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -38,9 +74,9 @@ const SignupPage = () => {
             <h1 className="text-4xl font-bold mb-8">Chess Master</h1>
             <div className="p-8 bg-zinc-800 rounded-lg shadow-xl w-full max-w-md">
                 <h2 className="text-2xl font-semibold mb-6">Sign Up</h2>
-                {error && (
+                {globalError && (
                     <div className="mb-4 p-3 bg-red-500/10 border border-red-500 rounded text-red-500 text-sm">
-                        {error}
+                        {globalError}
                     </div>
                 )}
                 <form className="space-y-4" onSubmit={handleSubmit}>
@@ -48,34 +84,37 @@ const SignupPage = () => {
                         <label className="block text-sm font-medium mb-1">Email</label>
                         <input 
                             type="email" 
-                            className="w-full p-2 rounded bg-zinc-700 border border-zinc-600 focus:outline-none focus:border-green-500" 
+                            className={`w-full p-2 rounded bg-zinc-700 border focus:outline-none ${fieldErrors.email ? 'border-red-500 focus:border-red-500' : 'border-zinc-600 focus:border-green-500'}`}
                             placeholder="Enter your email" 
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             required
                         />
+                        {fieldErrors.email && <p className="text-red-500 text-xs mt-1">{fieldErrors.email}</p>}
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Username</label>
                         <input 
                             type="text" 
-                            className="w-full p-2 rounded bg-zinc-700 border border-zinc-600 focus:outline-none focus:border-green-500" 
+                            className={`w-full p-2 rounded bg-zinc-700 border focus:outline-none ${fieldErrors.username ? 'border-red-500 focus:border-red-500' : 'border-zinc-600 focus:border-green-500'}`}
                             placeholder="Choose a username" 
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             required
                         />
+                        {fieldErrors.username && <p className="text-red-500 text-xs mt-1">{fieldErrors.username}</p>}
                     </div>
                     <div>
                         <label className="block text-sm font-medium mb-1">Password</label>
                         <input 
                             type="password" 
-                            className="w-full p-2 rounded bg-zinc-700 border border-zinc-600 focus:outline-none focus:border-green-500" 
+                            className={`w-full p-2 rounded bg-zinc-700 border focus:outline-none ${fieldErrors.password ? 'border-red-500 focus:border-red-500' : 'border-zinc-600 focus:border-green-500'}`}
                             placeholder="Choose a password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
                         />
+                        {fieldErrors.password && <p className="text-red-500 text-xs mt-1">{fieldErrors.password}</p>}
                     </div>
                     <button 
                         type="submit" 
