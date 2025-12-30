@@ -1,9 +1,11 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import Game from '../../components/game/Game';
 
 const GamePage = () => {
     const { mode } = useParams<{ mode: string }>();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const roomId = searchParams.get('roomId') || undefined;
 
     return (
         <div className="min-h-screen bg-zinc-950 text-white flex flex-col">
@@ -20,7 +22,7 @@ const GamePage = () => {
             </header>
             
             <main className="flex-1 overflow-hidden relative">
-               <Game mode={mode as 'ai' | 'online'} />
+               <Game mode={mode as 'ai' | 'online'} roomId={roomId} />
             </main>
         </div>
     );

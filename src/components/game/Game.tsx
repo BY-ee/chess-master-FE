@@ -9,9 +9,10 @@ import { gameApi } from '../../api/gameApi';
 
 interface GameProps {
     mode: 'ai' | 'online';
+    roomId?: string;
 }
 
-const Game = ({ mode }: GameProps) => {
+const Game = ({ mode, roomId }: GameProps) => {
     // Game Logic State
     const [game, setGame] = useState(new Chess());
     
@@ -78,44 +79,78 @@ const Game = ({ mode }: GameProps) => {
                     console.error('Failed to save game', err);
                     setIsSaved(false); // Retry possible?
                 });
+            } else if (mode === 'online' && socket && roomId && !isSaved) {
+                // Determine if WE should report the result. usually both clients might emit, or just the winner, or server detects it.
+                // Assuming server trusts client for now or validates moves.
+                // Better approach: Server detects checkmate/draw from move stream. 
+                // BUT, if we need to explicitly end it:
+                
+                // Only let one client or both send it, server handles idempotency.
+                setIsSaved(true);
+                socket.emit('game_end', {
+                    roomId,
+                    winnerColor, // 'w' | 'b' | undefined
+                    pgn: game.pgn()
+                });
             }
 
         } else {
             setGameStatus('');
         }
-    }, [game, userColor, mode, isSaved]);
+    }, [game, userColor, mode, isSaved, socket, roomId]);
 
     // Socket Listeners (Online Mode)
     useEffect(() => {
-        if (mode === 'online' && socket) {
-            socket.on('move', (move: { from: string; to: string; promotion?: string }) => {
+        if (mode === 'online' && socket && roomId) {
+            
+            // Join the game room
+            console.log(`Joining game room: ${roomId}`);
+            socket.emit('join_game', { roomId });
+
+            socket.on('move_made', (move: string) => {
                 // Apply opponent's move
+                console.log('Received move_made:', move);
+                // The server sends the move notation (SAN/UCI) string. 
+                // We pass it directly to safeMakeAMove which handles both string and object.
                 safeMakeAMove(move);
             });
             
-            socket.on('game_ended', (data: { winner: 'w' | 'b' | 'draw', pgn: string }) => {
+            socket.on('game_ended', (data: { winner: 'w' | 'b' | 'draw' | null, pgn: string }) => {
                 // Server confirms game end and save.
-                if (data.winner === 'draw') {
+                console.log('Game ended event received:', data);
+                if (data.winner === 'draw' || data.winner === null) {
                      setGameStatus('Game Over - Draw');
                 } else {
                      const isUserWinner = data.winner === userColor;
                      setGameStatus(isUserWinner ? 'You Win! (Online)' : 'You Lose! (Online)');
                 }
-                // Determine if we need to update local PGN? Usually move events cover it.
+                setIsSaved(true); // Stop local logic from trying to save again
             });
 
             socket.on('game_start', (data: { color: 'w' | 'b' }) => {
+                console.log('Game start! Assigned color:', data.color);
                 setUserColor(data.color);
                 resetGame(false); // Reset but keep color
             });
+            
+            // Handle join errors or full room
+            socket.on('error', (error: any) => {
+                console.error('Socket error:', error);
+                alert(`Game Error: ${error.message || 'Unknown error'}`);
+            });
 
             return () => {
-                socket.off('move');
+                socket.off('move_made');
                 socket.off('game_start');
                 socket.off('game_ended');
+                socket.off('error');
+                
+                // Notify server that we are leaving the room
+                console.log(`Leaving game room: ${roomId}`);
+                socket.emit('leave_game', { roomId });
             };
         }
-    }, [mode, socket]);
+    }, [mode, socket, roomId]);
 
     // Keyboard Navigation
     useEffect(() => {
@@ -194,8 +229,12 @@ const Game = ({ mode }: GameProps) => {
 
         const move = safeMakeAMove(moveData);
 
-        if (move && mode === 'online' && socket) {
-            socket.emit('move', moveData);
+        if (move && mode === 'online' && socket && roomId) {
+            console.log('Sending move:', moveData);
+            socket.emit('make_move', {
+                roomId,
+                move: move.san
+            });
         }
 
         return move !== null;
