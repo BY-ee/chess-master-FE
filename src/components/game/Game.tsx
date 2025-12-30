@@ -4,6 +4,8 @@ import { Chessboard } from 'react-chessboard';
 import { getBestMove } from '../../engine/ai';
 import { RefreshCw, Trophy, AlertTriangle, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { useSocket } from '../../hooks/useSocket';
+import { gameService } from '../../services/gameService';
+// import { useAuthStore } from '../../store/useAuthStore';
 
 interface GameProps {
     mode: 'ai' | 'online';
@@ -17,6 +19,8 @@ const Game = ({ mode }: GameProps) => {
     const [history, setHistory] = useState<{ fen: string; san: string }[]>([{ fen: new Chess().fen(), san: '' }]);
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [gameStatus, setGameStatus] = useState<string>('');
+    const [isSaved, setIsSaved] = useState(false);
+    // const { user } = useAuthStore(); // Removed unused
     
     // User Color State (Randomized on start for AI, determined by server for Online)
     const [userColor, setUserColor] = useState<'w' | 'b'>(() => Math.random() < 0.5 ? 'w' : 'b');
@@ -38,19 +42,47 @@ const Game = ({ mode }: GameProps) => {
     // Check Game Status
     useEffect(() => {
         if (game.isGameOver()) {
+            let status = '';
+            let result: 'win' | 'loss' | 'draw' = 'draw';
+            let winnerColor: 'w' | 'b' | undefined = undefined;
+
             if (game.isCheckmate()) {
-                const winnerColor = game.turn() === 'w' ? 'Black' : 'White';
-                const isUserWinner = (game.turn() === 'w' && userColor === 'b') || (game.turn() === 'b' && userColor === 'w');
-                setGameStatus(`Checkmate! ${winnerColor} wins! ${isUserWinner ? '(You Win!)' : '(You Lose!)'}`);
+                winnerColor = game.turn() === 'w' ? 'b' : 'w';
+                const winnerName = winnerColor === 'w' ? 'White' : 'Black';
+                const isUserWinner = userColor === winnerColor;
+                status = `Checkmate! ${winnerName} wins! ${isUserWinner ? '(You Win!)' : '(You Lose!)'}`;
+                result = isUserWinner ? 'win' : 'loss';
             } else if (game.isDraw()) {
-                setGameStatus('Draw!');
+                status = 'Draw!';
+                result = 'draw';
             } else {
-                setGameStatus('Game Over');
+                status = 'Game Over';
+                result = 'draw'; // Fallback
             }
+            setGameStatus(status);
+
+            // Save Game Result (AI Mode only - Online handled by server)
+            if (mode === 'ai' && !isSaved) {
+                const pgn = game.pgn();
+                setIsSaved(true);
+                gameService.saveGameResult({
+                    mode: 'ai',
+                    result,
+                    winnerColor,
+                    pgn,
+                    opponentId: 'ai',
+                }).then(() => {
+                    console.log('Game saved successfully');
+                }).catch((err) => {
+                    console.error('Failed to save game', err);
+                    setIsSaved(false); // Retry possible?
+                });
+            }
+
         } else {
             setGameStatus('');
         }
-    }, [game, userColor]);
+    }, [game, userColor, mode, isSaved]);
 
     // Socket Listeners (Online Mode)
     useEffect(() => {
@@ -58,6 +90,17 @@ const Game = ({ mode }: GameProps) => {
             socket.on('move', (move: { from: string; to: string; promotion?: string }) => {
                 // Apply opponent's move
                 safeMakeAMove(move);
+            });
+            
+            socket.on('game_ended', (data: { winner: 'w' | 'b' | 'draw', pgn: string }) => {
+                // Server confirms game end and save.
+                if (data.winner === 'draw') {
+                     setGameStatus('Game Over - Draw');
+                } else {
+                     const isUserWinner = data.winner === userColor;
+                     setGameStatus(isUserWinner ? 'You Win! (Online)' : 'You Lose! (Online)');
+                }
+                // Determine if we need to update local PGN? Usually move events cover it.
             });
 
             socket.on('game_start', (data: { color: 'w' | 'b' }) => {
@@ -68,6 +111,7 @@ const Game = ({ mode }: GameProps) => {
             return () => {
                 socket.off('move');
                 socket.off('game_start');
+                socket.off('game_ended');
             };
         }
     }, [mode, socket]);
@@ -88,7 +132,7 @@ const Game = ({ mode }: GameProps) => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    const safeMakeAMove = (move: string | { from: string; to: string; promotion?: string }, isSocketEvents = false) => {
+    const safeMakeAMove = (move: string | { from: string; to: string; promotion?: string }) => {
         try {
             const gameCopy = new Chess(gameRef.current.fen());
             const result = gameCopy.move(move);
@@ -162,6 +206,7 @@ const Game = ({ mode }: GameProps) => {
         setHistory([{ fen: newGame.fen(), san: '' }]);
         setCurrentMoveIndex(0);
         setGameStatus('');
+        setIsSaved(false);
         if (randomizeColor && mode === 'ai') {
              setUserColor(Math.random() < 0.5 ? 'w' : 'b');
         }
