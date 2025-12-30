@@ -4,8 +4,8 @@ import { useAuthStore } from '../store/useAuthStore';
 
 export interface SaveGameRequest {
     mode: 'ai' | 'online';
-    result: 'win' | 'loss' | 'draw';
-    winnerColor?: 'w' | 'b'; // Optional, inferred from result + user color if needed
+    result?: 'win' | 'loss' | 'draw'; // DEPRECATED: Backend ignores this field and derives from winnerColor
+    winnerColor?: 'w' | 'b'; // Required for non-draw games
     userColor: 'w' | 'b'; // REQUIRED: To identify if user played white or black
     pgn: string;
     opponentId?: string; // 'ai' or user UUID
@@ -44,6 +44,43 @@ export const gameApi = {
         } catch (error) {
              console.error('Failed to fetch moves:', error);
              throw error;
+        }
+    },
+
+    // Room Management for Multiplayer
+    createRoom: async () => {
+        try {
+            const response = await axios.post(`${API_URL}/games/rooms`, {}, {
+                headers: getAuthHeaders(),
+            });
+            return response.data; // Expected: { roomId: string, ... }
+        } catch (error) {
+            console.error('Failed to create room:', error);
+            throw error;
+        }
+    },
+
+    joinRoom: async (roomId: string) => {
+        try {
+            const response = await axios.post(`${API_URL}/games/rooms/${roomId}/join`, {}, {
+                headers: getAuthHeaders(),
+            });
+            return response.data; // Expected: { success: boolean, ... }
+        } catch (error) {
+            console.error('Failed to join room:', error);
+            throw error;
+        }
+    },
+
+    getRooms: async () => {
+        try {
+            const response = await axios.get(`${API_URL}/games/rooms`, {
+                headers: getAuthHeaders(),
+            });
+            return response.data; // Expected: Room[]
+        } catch (error) {
+            console.error('Failed to fetch rooms:', error);
+            throw error;
         }
     }
 };
