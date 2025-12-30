@@ -4,7 +4,7 @@ import { Chessboard } from 'react-chessboard';
 import { getBestMove } from '../../engine/ai';
 import { RefreshCw, Trophy, AlertTriangle, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { useSocket } from '../../hooks/useSocket';
-import { gameService } from '../../services/gameService';
+import { gameApi } from '../../api/gameApi';
 // import { useAuthStore } from '../../store/useAuthStore';
 
 interface GameProps {
@@ -65,7 +65,7 @@ const Game = ({ mode }: GameProps) => {
             if (mode === 'ai' && !isSaved) {
                 const pgn = game.pgn();
                 setIsSaved(true);
-                gameService.saveGameResult({
+                gameApi.saveGameResult({
                     mode: 'ai',
                     result,
                     winnerColor,

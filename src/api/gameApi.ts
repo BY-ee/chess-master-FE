@@ -20,7 +20,7 @@ const getAuthHeaders = () => {
     return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-export const gameService = {
+export const gameApi = {
     saveGameResult: async (data: GameResultDto) => {
         try {
             const response = await axios.post(`${API_URL}/games`, data, {
