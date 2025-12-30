@@ -82,7 +82,7 @@ const LobbyPage = () => {
             setShowCreateModal(false);
             setRoomName('');
             // Navigate to game with room ID
-            navigate(`/game/online?roomId=${room.roomId}`, { state: { role: 'host' } });
+            navigate(`/game/online?roomId=${room.roomId}`);
         } catch (error) {
             console.error('Failed to create room:', error);
         } finally {
@@ -93,7 +93,7 @@ const LobbyPage = () => {
     const handleJoinRoom = async (roomId: string) => {
         try {
             await gameApi.joinRoom(roomId);
-            navigate(`/game/online?roomId=${roomId}`, { state: { role: 'guest' } });
+            navigate(`/game/online?roomId=${roomId}`);
         } catch (error) {
             console.error('Failed to join room:', error);
             alert('Failed to join room. It may be full or no longer available.');

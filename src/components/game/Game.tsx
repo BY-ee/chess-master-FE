@@ -5,15 +5,14 @@ import { getBestMove } from '../../engine/ai';
 import { RefreshCw, Trophy, AlertTriangle, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { useSocket } from '../../hooks/useSocket';
 import { gameApi } from '../../api/gameApi';
-import { useAuthStore } from '../../store/useAuthStore';
+// import { useAuthStore } from '../../store/useAuthStore';
 
 interface GameProps {
     mode: 'ai' | 'online';
     roomId?: string;
-    initialRole?: 'host' | 'guest';
 }
 
-const Game = ({ mode, roomId, initialRole }: GameProps) => {
+const Game = ({ mode, roomId }: GameProps) => {
     // Game Logic State
     const [game, setGame] = useState(new Chess());
     
@@ -22,7 +21,7 @@ const Game = ({ mode, roomId, initialRole }: GameProps) => {
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [gameStatus, setGameStatus] = useState<string>('');
     const [isSaved, setIsSaved] = useState(false);
-    const { user } = useAuthStore();
+    // const { user } = useAuthStore(); // Removed unused
     
     // User Color State (Randomized on start for AI, determined by server for Online)
     const [userColor, setUserColor] = useState<'w' | 'b'>(() => Math.random() < 0.5 ? 'w' : 'b');
@@ -105,15 +104,8 @@ const Game = ({ mode, roomId, initialRole }: GameProps) => {
         if (mode === 'online' && socket && roomId) {
             
             // Join the game room
-            const payload: any = { roomId };
-            if (initialRole === 'host' && user) {
-                payload.whiteId = user.id;
-            } else if (initialRole === 'guest' && user) {
-                payload.blackId = user.id;
-            }
-            
-            console.log(`Joining game room: ${roomId}`, payload);
-            socket.emit('join_game', payload);
+            console.log(`Joining game room: ${roomId}`);
+            socket.emit('join_game', { roomId });
 
             socket.on('move_made', (move: string) => {
                 // Apply opponent's move
