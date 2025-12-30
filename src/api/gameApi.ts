@@ -6,6 +6,7 @@ export interface GameResultDto {
     mode: 'ai' | 'online';
     result: 'win' | 'loss' | 'draw';
     winnerColor?: 'w' | 'b'; // Optional, inferred from result + user color if needed
+    userColor: 'w' | 'b'; // REQUIRED: To identify if user played white or black
     pgn: string;
     opponentId?: string; // 'ai' or user UUID
     metadata?: Record<string, any>; // Difficulty, etc.
@@ -33,10 +34,10 @@ export const gameApi = {
         }
     },
 
-    // Future: Get Hand history
+    // Get Hand history
     getMyGames: async () => {
          try {
-            const response = await axios.get(`${API_URL}/games/my`, {
+            const response = await axios.get(`${API_URL}/games`, {
                 headers: getAuthHeaders(),
             });
             return response.data;

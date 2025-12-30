@@ -69,6 +69,7 @@ const Game = ({ mode }: GameProps) => {
                     mode: 'ai',
                     result,
                     winnerColor,
+                    userColor, // Passing the user's color
                     pgn,
                     opponentId: 'ai',
                 }).then(() => {
