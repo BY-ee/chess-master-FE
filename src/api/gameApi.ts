@@ -2,7 +2,7 @@ import axios from 'axios';
 import { API_URL } from '../config';
 import { useAuthStore } from '../store/useAuthStore';
 
-export interface GameResultDto {
+export interface SaveGameRequest {
     mode: 'ai' | 'online';
     result: 'win' | 'loss' | 'draw';
     winnerColor?: 'w' | 'b'; // Optional, inferred from result + user color if needed
@@ -22,7 +22,7 @@ const getAuthHeaders = () => {
 };
 
 export const gameApi = {
-    saveGameResult: async (data: GameResultDto) => {
+    saveGameResult: async (data: SaveGameRequest) => {
         try {
             const response = await axios.post(`${API_URL}/games`, data, {
                 headers: getAuthHeaders(),
