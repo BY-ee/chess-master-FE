@@ -5,14 +5,15 @@ import { getBestMove } from '../../engine/ai';
 import { RefreshCw, Trophy, AlertTriangle, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { useSocket } from '../../hooks/useSocket';
 import { gameApi } from '../../api/gameApi';
-// import { useAuthStore } from '../../store/useAuthStore';
+import { useAuthStore } from '../../store/useAuthStore';
 
 interface GameProps {
     mode: 'ai' | 'online';
     roomId?: string;
+    initialRole?: 'host' | 'guest';
 }
 
-const Game = ({ mode, roomId }: GameProps) => {
+const Game = ({ mode, roomId, initialRole }: GameProps) => {
     // Game Logic State
     const [game, setGame] = useState(new Chess());
     
@@ -21,7 +22,7 @@ const Game = ({ mode, roomId }: GameProps) => {
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [gameStatus, setGameStatus] = useState<string>('');
     const [isSaved, setIsSaved] = useState(false);
-    // const { user } = useAuthStore(); // Removed unused
+    const { user } = useAuthStore();
     
     // User Color State (Randomized on start for AI, determined by server for Online)
     const [userColor, setUserColor] = useState<'w' | 'b'>(() => Math.random() < 0.5 ? 'w' : 'b');
@@ -104,8 +105,15 @@ const Game = ({ mode, roomId }: GameProps) => {
         if (mode === 'online' && socket && roomId) {
             
             // Join the game room
-            console.log(`Joining game room: ${roomId}`);
-            socket.emit('join_game', { roomId });
+            const payload: any = { roomId };
+            if (initialRole === 'host' && user) {
+                payload.whiteId = user.id;
+            } else if (initialRole === 'guest' && user) {
+                payload.blackId = user.id;
+            }
+            
+            console.log(`Joining game room: ${roomId}`, payload);
+            socket.emit('join_game', payload);
 
             socket.on('move_made', (move: string) => {
                 // Apply opponent's move
@@ -127,10 +135,46 @@ const Game = ({ mode, roomId }: GameProps) => {
                 setIsSaved(true); // Stop local logic from trying to save again
             });
 
-            socket.on('game_start', (data: { color: 'w' | 'b' }) => {
-                console.log('Game start! Assigned color:', data.color);
+            socket.on('game_start', (data: { color: 'w' | 'b', fen?: string, pgn?: string }) => {
+                console.log('Game start!', data);
                 setUserColor(data.color);
-                resetGame(false); // Reset but keep color
+                
+                if (data.fen || data.pgn) {
+                    console.log('Restoring game state from server...');
+                    const newGame = new Chess();
+                    try {
+                        let reconstructedHistory: { fen: string; san: string }[] = [{ fen: new Chess().fen(), san: '' }];
+
+                        if (data.pgn) {
+                            newGame.loadPgn(data.pgn);
+                            
+                            // Reconstruct history array for UI
+                            const tempGame = new Chess();
+                            const moves = newGame.history({ verbose: true });
+                            
+                            moves.forEach(move => {
+                                tempGame.move(move);
+                                reconstructedHistory.push({
+                                    fen: tempGame.fen(),
+                                    san: move.san
+                                });
+                            });
+                        } else if (data.fen) {
+                            newGame.load(data.fen);
+                            // If only FEN is provided, we can't reconstruct move history, only final state
+                            reconstructedHistory.push({ fen: newGame.fen(), san: '' });
+                        }
+                        
+                        setGame(newGame);
+                        setHistory(reconstructedHistory);
+                        setCurrentMoveIndex(reconstructedHistory.length - 1);
+                    } catch (e) {
+                        console.error('Failed to load remote state:', e);
+                        resetGame(false);
+                    }
+                } else {
+                    resetGame(false); // Reset but keep color
+                }
             });
             
             // Handle join errors or full room
