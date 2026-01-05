@@ -4,6 +4,7 @@ import { useSocket } from '../../hooks/useSocket';
 import { useEffect, useState } from 'react';
 import { gameApi } from '../../api/gameApi';
 import { Plus, Users, Clock } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface Room {
     roomId: string;
@@ -96,7 +97,7 @@ const LobbyPage = () => {
             navigate(`/game/online?roomId=${roomId}`);
         } catch (error) {
             console.error('Failed to join room:', error);
-            alert('Failed to join room. It may be full or no longer available.');
+            toast.error('Failed to join room. It may be full or no longer available.');
             loadRooms();
         }
     };

@@ -6,6 +6,7 @@ import { RefreshCw, Trophy, AlertTriangle, ChevronLeft, ChevronRight, History } 
 import { useSocket } from '../../hooks/useSocket';
 import { gameApi } from '../../api/gameApi';
 import { useAuthStore } from '../../store/useAuthStore';
+import toast from 'react-hot-toast';
 
 interface GameProps {
     mode: 'ai' | 'online';
@@ -27,8 +28,13 @@ const Game = ({ mode, roomId }: GameProps) => {
     const rematchIncomingRef = useRef<{ requestedBy: number; expiresAt: Date } | null>(null); // Ref for socket access
     const [timeLeft, setTimeLeft] = useState<number>(60);
     const [isRematchDisabled, setIsRematchDisabled] = useState(false);
+    const [isRematchExpired, setIsRematchExpired] = useState(false);
     const [rematchCooldown, setRematchCooldown] = useState(0); // Cooldown in seconds
     const { user } = useAuthStore();
+    
+    // Waiting State (Synchronized Game Start)
+    const [isWaitingForOpponent, setIsWaitingForOpponent] = useState(mode === 'online'); // Default to waiting in online mode until confirmed
+
     
     // User Color State (Randomized on start for AI, determined by server for Online)
     const [userColor, setUserColor] = useState<'w' | 'b'>(() => Math.random() < 0.5 ? 'w' : 'b');
@@ -116,6 +122,27 @@ const Game = ({ mode, roomId }: GameProps) => {
             console.log(`Joining game room: ${roomId}`);
             socket.emit('join_game', { roomId });
 
+            // New Events for Synchronized Start
+            socket.on('player_joined', (data: { username: string, currentPlayers: number }) => {
+                console.log('Player joined:', data);
+                toast(`Player ${data.username} joined! (${data.currentPlayers}/2)`);
+            });
+
+            socket.on('player_left', (data: { username: string, currentPlayers: number }) => {
+                console.log('Player left:', data);
+                toast.error(`Player ${data.username} left the game.`);
+                if (data.currentPlayers < 2) {
+                    setIsWaitingForOpponent(true);
+                }
+            });
+
+            socket.on('game_ready', (data: { whiteId: number; blackId: number }) => {
+                console.log('Game Ready!', data);
+                setIsWaitingForOpponent(false);
+                toast.success('Game Started! Good luck.');
+            });
+
+
             socket.on('move_made', (move: string) => {
                 // Apply opponent's move
                 console.log('Received move_made:', move);
@@ -172,7 +199,9 @@ const Game = ({ mode, roomId }: GameProps) => {
                 setRematchIncoming(null);
                 rematchIncomingRef.current = null;
                 setIsRematchDisabled(false); // Reset disabled state on new game
+                setIsRematchExpired(false);
                 setRematchCooldown(0);
+                setIsWaitingForOpponent(false); // Ensure waiting overlay is gone on restart
             });
 
             socket.on('rematch_declined', (data: { declinedBy: number }) => {
@@ -182,10 +211,10 @@ const Game = ({ mode, roomId }: GameProps) => {
                     const isCancellation = rematchIncomingRef.current && String(rematchIncomingRef.current.requestedBy) === String(data.declinedBy);
                     
                     if (isCancellation) {
-                         alert('Rematch request canceled by opponent.');
+                         toast.success('Rematch request canceled by opponent.');
                          // Do NOT disable button, as it was just a cancellation
                     } else {
-                         alert('Rematch declined.');
+                         toast.error('Rematch declined.');
                          setIsRematchDisabled(true); // Disable button if opponent REJECTED our request
                     }
                 }
@@ -198,6 +227,12 @@ const Game = ({ mode, roomId }: GameProps) => {
                 console.log('Game start!', data);
                 setUserColor(data.color);
                 userColorRef.current = data.color;
+                
+                // Only stop waiting immediately if we are restoring an ACTIVE game (has history)
+                // Otherwise (fresh game), we keep waiting until 'game_ready' which confirms both players are in
+                if (data.fen || data.pgn) {
+                    setIsWaitingForOpponent(false);
+                }
                 
                 if (data.fen || data.pgn) {
                     console.log('Restoring game state from server...');
@@ -238,18 +273,43 @@ const Game = ({ mode, roomId }: GameProps) => {
             });
             
             // Handle join errors or full room
+            // Handle join errors or full room
+            // Refactored to use Standard Codes as per Backend Update (2026-01-05)
             socket.on('error', (error: any) => {
                 console.error('Socket error:', error);
-                // Handle object-type errors or string errors
-                const msg = typeof error === 'string' ? error : (error.message || JSON.stringify(error));
                 
-                // Specific Rematch Errors
-                if (msg.includes('expired') || msg.includes('not found') || msg.includes('Game not active')) {
-                     alert(`Cannot start rematch: ${msg}`);
-                     setRematchRequested(false);
-                     setRematchIncoming(null);
-                } else {
-                     alert(`Game Error: ${msg}`);
+                // Backend now sends { code, message } object
+                // Fallback for string errors just in case
+                const errCode = error.code || 'GENERIC_ERROR';
+                const errMsg = error.message || (typeof error === 'string' ? error : JSON.stringify(error));
+
+                switch (errCode) {
+                    case 'ROOM_EXPIRED':
+                    case 'ROOM_NOT_FOUND':
+                    case 'REMATCH_EXPIRED':
+                        toast.error(`Cannot start rematch: ${errMsg}`);
+                        setRematchRequested(false);
+                        setRematchIncoming(null);
+                        setIsRematchExpired(true);
+                        break;
+                    case 'NO_REMATCH_REQUEST':
+                    case 'INVALID_ACTION':
+                        toast.error(`Action failed: ${errMsg}`);
+                        // Don't disable rematch, just reset request state
+                        setRematchRequested(false);
+                        setRematchIncoming(null);
+                        break;
+                    default:
+                        // Handle legacy string errors (Room expired, etc) for backward compatibility or unexpected errors
+                         if (errMsg.includes('expired') || errMsg.includes('not found') || errMsg.includes('valid for rematch')) {
+                             toast.error(`Cannot start rematch: ${errMsg}`);
+                             setRematchRequested(false);
+                             setRematchIncoming(null);
+                             setIsRematchExpired(true);
+                         } else {
+                             toast.error(`Game Error: ${errMsg}`);
+                         }
+                        break;
                 }
             });
 
@@ -260,6 +320,10 @@ const Game = ({ mode, roomId }: GameProps) => {
                 socket.off('rematch_requested');
                 socket.off('game_restarted');
                 socket.off('rematch_declined');
+                socket.off('rematch_declined');
+                socket.off('player_joined');
+                socket.off('player_left');
+                socket.off('game_ready');
                 socket.off('error');
                 
                 // Notify server that we are leaving the room
@@ -499,8 +563,17 @@ const Game = ({ mode, roomId }: GameProps) => {
                         customDarkSquareStyle={{ backgroundColor: '#769656' }}
                         customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
                         animationDuration={200}
-                        arePiecesDraggable={currentMoveIndex === history.length - 1 && game.turn() === userColor} // Only drag if latest and user turn
+                        arePiecesDraggable={!isWaitingForOpponent && currentMoveIndex === history.length - 1 && game.turn() === userColor} // Only drag if active, latest, and user turn
                     />
+                    
+                    {/* Waiting For Opponent Overlay */}
+                    {isWaitingForOpponent && !gameStatus && (
+                        <div className="absolute inset-0 z-40 bg-black/50 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-in fade-in duration-500">
+                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
+                             <h3 className="text-xl font-bold">Waiting for opponent...</h3>
+                             <p className="text-zinc-300 text-sm mt-2">The game will start when both players connect.</p>
+                        </div>
+                    )}
                     
                     {/* Replay Overlay Indicator */}
                     {currentMoveIndex !== history.length - 1 && (
@@ -596,19 +669,21 @@ const Game = ({ mode, roomId }: GameProps) => {
                             }
                             else resetGame(true);
                         }}
-                        disabled={isRematchDisabled || rematchCooldown > 0}
+                        disabled={isRematchDisabled || isRematchExpired || rematchCooldown > 0}
                         className={`px-6 py-3 rounded-xl font-bold text-lg transition-transform hover:scale-105 ${
-                            isRematchDisabled || rematchCooldown > 0
+                            isRematchDisabled || isRematchExpired || rematchCooldown > 0
                                 ? 'bg-zinc-700 cursor-not-allowed opacity-50' 
                                 : rematchRequested ? 'bg-zinc-600 hover:bg-red-600' : 'bg-green-600 hover:bg-green-500'
                         }`}
                     >
                         {mode === 'online' 
-                            ? (isRematchDisabled 
-                                ? 'Rematch Declined' 
-                                : rematchCooldown > 0
-                                    ? `Wait ${rematchCooldown}s`
-                                    : rematchRequested ? 'Cancel Request' : 'Rematch') 
+                            ? (isRematchExpired
+                                ? 'Room Expired'
+                                : isRematchDisabled 
+                                    ? 'Rematch Declined' 
+                                    : rematchCooldown > 0
+                                        ? `Wait ${rematchCooldown}s`
+                                        : rematchRequested ? 'Cancel Request' : 'Rematch') 
                             : 'Play Again'}
                     </button>
                     {mode === 'online' && (
