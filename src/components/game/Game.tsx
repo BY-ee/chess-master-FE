@@ -5,7 +5,7 @@ import { getBestMove } from '../../engine/ai';
 import { RefreshCw, Trophy, AlertTriangle, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { useSocket } from '../../hooks/useSocket';
 import { gameApi } from '../../api/gameApi';
-// import { useAuthStore } from '../../store/useAuthStore';
+import { useAuthStore } from '../../store/useAuthStore';
 
 interface GameProps {
     mode: 'ai' | 'online';
@@ -21,11 +21,11 @@ const Game = ({ mode, roomId }: GameProps) => {
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [gameStatus, setGameStatus] = useState<string>('');
     const [isSaved, setIsSaved] = useState(false);
-    
     // Rematch State
     const [rematchRequested, setRematchRequested] = useState(false); // We sent request
     const [rematchIncoming, setRematchIncoming] = useState<{ requestedBy: number; expiresAt: Date } | null>(null); // Opponent sent request
-    // const { user } = useAuthStore(); // Removed unused
+    const [timeLeft, setTimeLeft] = useState<number>(60);
+    const { user } = useAuthStore();
     
     // User Color State (Randomized on start for AI, determined by server for Online)
     const [userColor, setUserColor] = useState<'w' | 'b'>(() => Math.random() < 0.5 ? 'w' : 'b');
@@ -125,6 +125,10 @@ const Game = ({ mode, roomId }: GameProps) => {
                 // Server confirms game end and save.
                 console.log('Game ended event received:', data);
                 
+                // If we already saved/handled this game locally, do not re-open the modal
+                // This prevents "Ghost Modal" when opponent refreshes and re-triggers game_end
+                if (isSaved) return;
+
                 let winner: 'w' | 'b' | 'draw' = 'draw';
                 if (data.result === '1-0') winner = 'w';
                 else if (data.result === '0-1') winner = 'b';
@@ -141,7 +145,14 @@ const Game = ({ mode, roomId }: GameProps) => {
             // Rematch Listeners
             socket.on('rematch_requested', (data: { requestedBy: number; expiresAt: Date }) => {
                 console.log('Rematch requested:', data);
-                setRematchIncoming(data);
+                if (user && String(data.requestedBy) !== String(user.id)) {
+                     // Calculate initial time left immediately to prevent visual jump
+                     const now = new Date().getTime();
+                     const expires = new Date(data.expiresAt).getTime();
+                     const initialSeconds = Math.max(0, Math.floor((expires - now) / 1000));
+                     setTimeLeft(initialSeconds);
+                     setRematchIncoming(data);
+                }
             });
 
             socket.on('game_restarted', (data: { whiteId: number; blackId: number }) => {
@@ -203,7 +214,17 @@ const Game = ({ mode, roomId }: GameProps) => {
             // Handle join errors or full room
             socket.on('error', (error: any) => {
                 console.error('Socket error:', error);
-                alert(`Game Error: ${error.message || 'Unknown error'}`);
+                // Handle object-type errors or string errors
+                const msg = typeof error === 'string' ? error : (error.message || JSON.stringify(error));
+                
+                // Specific Rematch Errors
+                if (msg.includes('expired') || msg.includes('not found') || msg.includes('Game not active')) {
+                     alert(`Cannot start rematch: ${msg}`);
+                     setRematchRequested(false);
+                     setRematchIncoming(null);
+                } else {
+                     alert(`Game Error: ${msg}`);
+                }
             });
 
             return () => {
@@ -257,13 +278,11 @@ const Game = ({ mode, roomId }: GameProps) => {
     // AI Turn Logic
     useEffect(() => {
       if (mode !== 'ai') return;
-
-      // Run AI if it's NOT user's turn, game not over, AND we are viewing the latest move.
+      // ... logic
       const isLatestMove = currentMoveIndex === history.length - 1;
       const isAiTurn = game.turn() !== userColor;
 
       if (isAiTurn && !game.isGameOver() && isLatestMove) {
-        // Add a small delay for realism
         const timeoutId = setTimeout(() => {
           const aiMove = getBestMove(game);
           if (aiMove) {
@@ -273,6 +292,24 @@ const Game = ({ mode, roomId }: GameProps) => {
         return () => clearTimeout(timeoutId);
       }
     }, [game, currentMoveIndex, history, userColor, mode]);
+
+    // Rematch Timer Logic
+    useEffect(() => {
+        if (!rematchIncoming) return;
+
+        const interval = setInterval(() => {
+             const now = new Date().getTime();
+             const expires = new Date(rematchIncoming.expiresAt).getTime();
+             const seconds = Math.max(0, Math.floor((expires - now) / 1000));
+             setTimeLeft(seconds);
+             
+             if (seconds <= 0) {
+                 setRematchIncoming(null); // Auto close if expired
+             }
+        }, 1000);
+        
+        return () => clearInterval(interval);
+    }, [rematchIncoming]);
 
     const onDrop = (sourceSquare: string, targetSquare: string) => {
         // Prevent moves if reviewing past history
@@ -525,7 +562,7 @@ const Game = ({ mode, roomId }: GameProps) => {
                 <div className="glass-panel p-6 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-4 shadow-2xl z-50 animate-in fade-in zoom-in duration-300 border border-yellow-500/50">
                     <Trophy size={48} className="text-yellow-500 animate-pulse" />
                     <h2 className="text-2xl font-bold text-center">Opponent wants a Rematch!</h2>
-                    <p className="text-zinc-400">Time remaining: 60s</p>
+                    <p className="text-zinc-400">Time remaining: {timeLeft}s</p>
                     <div className="flex gap-4">
                         <button 
                             onClick={handleAcceptRematch}
