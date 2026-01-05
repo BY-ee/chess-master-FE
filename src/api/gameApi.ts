@@ -82,5 +82,17 @@ export const gameApi = {
             console.error('Failed to fetch rooms:', error);
             throw error;
         }
+    },
+
+    getActiveGames: async () => {
+        try {
+            const response = await axios.get(`${API_URL}/games/rooms/active`, {
+                headers: getAuthHeaders(),
+            });
+            return response.data; // Expected: Room[]
+        } catch (error) {
+            console.error('Failed to fetch active games:', error);
+            throw error;
+        }
     }
 };
