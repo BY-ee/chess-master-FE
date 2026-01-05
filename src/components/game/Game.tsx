@@ -21,6 +21,10 @@ const Game = ({ mode, roomId }: GameProps) => {
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [gameStatus, setGameStatus] = useState<string>('');
     const [isSaved, setIsSaved] = useState(false);
+    
+    // Rematch State
+    const [rematchRequested, setRematchRequested] = useState(false); // We sent request
+    const [rematchIncoming, setRematchIncoming] = useState<{ requestedBy: number; expiresAt: Date } | null>(null); // Opponent sent request
     // const { user } = useAuthStore(); // Removed unused
     
     // User Color State (Randomized on start for AI, determined by server for Online)
@@ -134,6 +138,25 @@ const Game = ({ mode, roomId }: GameProps) => {
                 setIsSaved(true); // Stop local logic from trying to save again
             });
 
+            // Rematch Listeners
+            socket.on('rematch_requested', (data: { requestedBy: number; expiresAt: Date }) => {
+                console.log('Rematch requested:', data);
+                setRematchIncoming(data);
+            });
+
+            socket.on('game_restarted', (data: { whiteId: number; blackId: number }) => {
+                console.log('Game restarted!', data);
+                // Reset game locally
+                const newGame = new Chess();
+                setGame(newGame);
+                setHistory([{ fen: newGame.fen(), san: '' }]);
+                setCurrentMoveIndex(0);
+                setGameStatus('');
+                setIsSaved(false);
+                setRematchRequested(false);
+                setRematchIncoming(null);
+            });
+
             socket.on('game_start', (data: { color: 'w' | 'b', fen?: string, pgn?: string }) => {
                 console.log('Game start!', data);
                 setUserColor(data.color);
@@ -187,6 +210,8 @@ const Game = ({ mode, roomId }: GameProps) => {
                 socket.off('move_made');
                 socket.off('game_start');
                 socket.off('game_ended');
+                socket.off('rematch_requested');
+                socket.off('game_restarted');
                 socket.off('error');
                 
                 // Notify server that we are leaving the room
@@ -294,6 +319,22 @@ const Game = ({ mode, roomId }: GameProps) => {
         if (randomizeColor && mode === 'ai') {
              setUserColor(Math.random() < 0.5 ? 'w' : 'b');
         }
+        setRematchRequested(false);
+        setRematchIncoming(null);
+    };
+
+    const handleRematchRequest = () => {
+        if (mode === 'online' && socket && roomId) {
+            socket.emit('request_rematch', { roomId });
+            setRematchRequested(true);
+        }
+    };
+
+    const handleAcceptRematch = () => {
+        if (mode === 'online' && socket && roomId) {
+            socket.emit('accept_rematch', { roomId });
+            setRematchIncoming(null); // Clear modal, wait for restart
+        }
     };
 
     const navigateHistory = (direction: 'back' | 'forward') => {
@@ -350,6 +391,11 @@ const Game = ({ mode, roomId }: GameProps) => {
                         <RefreshCw size={18} />
                         New Game
                     </button>
+                    {mode === 'online' && (
+                        <div className="flex gap-2">
+                             {/* Small indicators or controls for rematch could go here, but main modal is better */}
+                        </div>
+                    )}
                 </div>
 
                 <div className="w-full aspect-square shadow-2xl rounded-lg overflow-hidden border-4 border-zinc-800 relative">
@@ -450,11 +496,50 @@ const Game = ({ mode, roomId }: GameProps) => {
                     {game.isCheckmate() ? <Trophy size={48} className="text-yellow-500" /> : <AlertTriangle size={48} className="text-zinc-400" />}
                     <h2 className="text-2xl font-bold">{gameStatus}</h2>
                     <button 
-                        onClick={() => resetGame(true)}
-                        className="px-6 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold text-lg transition-transform hover:scale-105"
+                        onClick={() => {
+                            if (mode === 'online') handleRematchRequest();
+                            else resetGame(true);
+                        }}
+                        disabled={rematchRequested}
+                        className={`px-6 py-3 rounded-xl font-bold text-lg transition-transform hover:scale-105 ${
+                            rematchRequested ? 'bg-zinc-600 cursor-wait' : 'bg-green-600 hover:bg-green-500'
+                        }`}
                     >
-                        Play Again
+                        {mode === 'online' 
+                            ? (rematchRequested ? 'Rematch Requested...' : 'Rematch') 
+                            : 'Play Again'}
                     </button>
+                    {mode === 'online' && (
+                        <button 
+                             onClick={() => setGameStatus('')} // Just close the modal to view board
+                             className="text-zinc-400 hover:text-white text-sm mt-3 underline"
+                        >
+                            Close Menu (View Board)
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {/* Rematch Incoming Modal */}
+            {rematchIncoming && (
+                <div className="glass-panel p-6 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-4 shadow-2xl z-50 animate-in fade-in zoom-in duration-300 border border-yellow-500/50">
+                    <Trophy size={48} className="text-yellow-500 animate-pulse" />
+                    <h2 className="text-2xl font-bold text-center">Opponent wants a Rematch!</h2>
+                    <p className="text-zinc-400">Time remaining: 60s</p>
+                    <div className="flex gap-4">
+                        <button 
+                            onClick={handleAcceptRematch}
+                            className="px-6 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold text-lg transition-transform hover:scale-105"
+                        >
+                            Accept
+                        </button>
+                        <button 
+                            onClick={() => setRematchIncoming(null)}
+                            className="px-6 py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold text-lg transition-transform hover:scale-105"
+                        >
+                            Decline
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
