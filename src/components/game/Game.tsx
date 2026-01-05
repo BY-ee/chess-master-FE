@@ -24,8 +24,10 @@ const Game = ({ mode, roomId }: GameProps) => {
     // Rematch State
     const [rematchRequested, setRematchRequested] = useState(false); // We sent request
     const [rematchIncoming, setRematchIncoming] = useState<{ requestedBy: number; expiresAt: Date } | null>(null); // Opponent sent request
+    const rematchIncomingRef = useRef<{ requestedBy: number; expiresAt: Date } | null>(null); // Ref for socket access
     const [timeLeft, setTimeLeft] = useState<number>(60);
     const [isRematchDisabled, setIsRematchDisabled] = useState(false);
+    const [rematchCooldown, setRematchCooldown] = useState(0); // Cooldown in seconds
     const { user } = useAuthStore();
     
     // User Color State (Randomized on start for AI, determined by server for Online)
@@ -153,6 +155,7 @@ const Game = ({ mode, roomId }: GameProps) => {
                      const initialSeconds = Math.max(0, Math.floor((expires - now) / 1000));
                      setTimeLeft(initialSeconds);
                      setRematchIncoming(data);
+                     rematchIncomingRef.current = data;
                 }
             });
 
@@ -167,17 +170,28 @@ const Game = ({ mode, roomId }: GameProps) => {
                 setIsSaved(false);
                 setRematchRequested(false);
                 setRematchIncoming(null);
+                rematchIncomingRef.current = null;
                 setIsRematchDisabled(false); // Reset disabled state on new game
+                setRematchCooldown(0);
             });
 
             socket.on('rematch_declined', (data: { declinedBy: number }) => {
                 console.log('Rematch declined:', data);
                 if (user && String(data.declinedBy) !== String(user.id)) {
-                    alert('Rematch declined.');
-                    setIsRematchDisabled(true); // Disable button if opponent declined
+                    // Check if this was a cancellation of an incoming request or a rejection of our request
+                    const isCancellation = rematchIncomingRef.current && String(rematchIncomingRef.current.requestedBy) === String(data.declinedBy);
+                    
+                    if (isCancellation) {
+                         alert('Rematch request canceled by opponent.');
+                         // Do NOT disable button, as it was just a cancellation
+                    } else {
+                         alert('Rematch declined.');
+                         setIsRematchDisabled(true); // Disable button if opponent REJECTED our request
+                    }
                 }
                 setRematchRequested(false);
                 setRematchIncoming(null);
+                rematchIncomingRef.current = null;
             });
 
             socket.on('game_start', (data: { color: 'w' | 'b', fen?: string, pgn?: string }) => {
@@ -318,11 +332,20 @@ const Game = ({ mode, roomId }: GameProps) => {
              
              if (seconds <= 0) {
                  setRematchIncoming(null); // Auto close if expired
+                 rematchIncomingRef.current = null;
              }
         }, 1000);
-        
+
         return () => clearInterval(interval);
     }, [rematchIncoming]);
+
+    // Rematch Cooldown Timer
+    useEffect(() => {
+        if (rematchCooldown > 0) {
+            const timer = setTimeout(() => setRematchCooldown(c => c - 1), 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [rematchCooldown]);
 
     const onDrop = (sourceSquare: string, targetSquare: string) => {
         // Prevent moves if reviewing past history
@@ -384,6 +407,7 @@ const Game = ({ mode, roomId }: GameProps) => {
         if (mode === 'online' && socket && roomId) {
             socket.emit('accept_rematch', { roomId });
             setRematchIncoming(null); // Clear modal, wait for restart
+            rematchIncomingRef.current = null;
         }
     };
 
@@ -391,6 +415,7 @@ const Game = ({ mode, roomId }: GameProps) => {
         if (mode === 'online' && socket && roomId) {
              socket.emit('decline_rematch', { roomId });
              setRematchIncoming(null);
+             rematchIncomingRef.current = null;
              setRematchRequested(false); // Also cancel if we sent one? No, this handles incoming.
         }
     };
@@ -400,6 +425,8 @@ const Game = ({ mode, roomId }: GameProps) => {
         if (mode === 'online' && socket && roomId) {
              socket.emit('decline_rematch', { roomId }); // Same event for cancel
              setRematchRequested(false);
+             // Verify if we should add cooldown? Yes, to prevent spam.
+             setRematchCooldown(5); // 5 seconds cooldown
         }
     };
 
@@ -569,15 +596,19 @@ const Game = ({ mode, roomId }: GameProps) => {
                             }
                             else resetGame(true);
                         }}
-                        disabled={isRematchDisabled}
+                        disabled={isRematchDisabled || rematchCooldown > 0}
                         className={`px-6 py-3 rounded-xl font-bold text-lg transition-transform hover:scale-105 ${
-                            isRematchDisabled 
+                            isRematchDisabled || rematchCooldown > 0
                                 ? 'bg-zinc-700 cursor-not-allowed opacity-50' 
                                 : rematchRequested ? 'bg-zinc-600 hover:bg-red-600' : 'bg-green-600 hover:bg-green-500'
                         }`}
                     >
                         {mode === 'online' 
-                            ? (isRematchDisabled ? 'Rematch Declined' : (rematchRequested ? 'Cancel Request' : 'Rematch')) 
+                            ? (isRematchDisabled 
+                                ? 'Rematch Declined' 
+                                : rematchCooldown > 0
+                                    ? `Wait ${rematchCooldown}s`
+                                    : rematchRequested ? 'Cancel Request' : 'Rematch') 
                             : 'Play Again'}
                     </button>
                     {mode === 'online' && (
