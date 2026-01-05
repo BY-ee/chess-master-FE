@@ -33,12 +33,14 @@ const Game = ({ mode, roomId }: GameProps) => {
     const gameRef = useRef(game);
     const historyRef = useRef(history);
     const indexRef = useRef(currentMoveIndex);
+    const userColorRef = useRef(userColor);
 
     useEffect(() => {
         gameRef.current = game;
         historyRef.current = history;
         indexRef.current = currentMoveIndex;
-    }, [game, history, currentMoveIndex]);
+        userColorRef.current = userColor;
+    }, [game, history, currentMoveIndex, userColor]);
 
     // Check Game Status
     useEffect(() => {
@@ -115,13 +117,18 @@ const Game = ({ mode, roomId }: GameProps) => {
                 safeMakeAMove(move);
             });
             
-            socket.on('game_ended', (data: { winner: 'w' | 'b' | 'draw' | null, pgn: string }) => {
+            socket.on('game_ended', (data: { result: '1-0' | '0-1' | '1/2-1/2', saved: boolean }) => {
                 // Server confirms game end and save.
                 console.log('Game ended event received:', data);
-                if (data.winner === 'draw' || data.winner === null) {
+                
+                let winner: 'w' | 'b' | 'draw' = 'draw';
+                if (data.result === '1-0') winner = 'w';
+                else if (data.result === '0-1') winner = 'b';
+                
+                if (winner === 'draw') {
                      setGameStatus('Game Over - Draw');
                 } else {
-                     const isUserWinner = data.winner === userColor;
+                     const isUserWinner = winner === userColorRef.current;
                      setGameStatus(isUserWinner ? 'You Win! (Online)' : 'You Lose! (Online)');
                 }
                 setIsSaved(true); // Stop local logic from trying to save again
@@ -130,6 +137,7 @@ const Game = ({ mode, roomId }: GameProps) => {
             socket.on('game_start', (data: { color: 'w' | 'b', fen?: string, pgn?: string }) => {
                 console.log('Game start!', data);
                 setUserColor(data.color);
+                userColorRef.current = data.color;
                 
                 if (data.fen || data.pgn) {
                     console.log('Restoring game state from server...');
