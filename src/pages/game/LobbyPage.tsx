@@ -26,6 +26,10 @@ const LobbyPage = () => {
     const [roomName, setRoomName] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [isLoadingRooms, setIsLoadingRooms] = useState(false);
+    
+    // Temporary client-side persistence for active game re-join
+    const [lastActiveGameId, setLastActiveGameId] = useState<string | null>(localStorage.getItem('chess_last_active_room'));
+
 
     useEffect(() => {
         if (!socket) return;
@@ -83,7 +87,10 @@ const LobbyPage = () => {
             setShowCreateModal(false);
             setRoomName('');
             // Navigate to game with room ID
+            localStorage.setItem('chess_last_active_room', room.roomId);
+            setLastActiveGameId(room.roomId);
             navigate(`/game/online?roomId=${room.roomId}`);
+
         } catch (error) {
             console.error('Failed to create room:', error);
         } finally {
@@ -94,7 +101,10 @@ const LobbyPage = () => {
     const handleJoinRoom = async (roomId: string) => {
         try {
             await gameApi.joinRoom(roomId);
+            localStorage.setItem('chess_last_active_room', roomId);
+            setLastActiveGameId(roomId);
             navigate(`/game/online?roomId=${roomId}`);
+
         } catch (error) {
             console.error('Failed to join room:', error);
             toast.error('Failed to join room. It may be full or no longer available.');
@@ -139,8 +149,35 @@ const LobbyPage = () => {
                 </header>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Left Column: Quick Play */}
+                    {/* Left Column: Quick Play & Active Game */}
                     <div className="lg:col-span-1 space-y-6">
+                         
+                        {/* My Active Game (Rejoin) */}
+                        {lastActiveGameId && (
+                            <div className="bg-gradient-to-br from-indigo-900/80 to-blue-900/80 backdrop-blur-sm p-6 rounded-2xl shadow-xl border border-blue-500/30 animate-in slide-in-from-left duration-300">
+                                <h3 className="text-lg font-bold mb-3 text-blue-100 flex items-center gap-2">
+                                    <Clock className="w-5 h-5 text-blue-300" />
+                                    Active Game Found
+                                </h3>
+                                <p className="text-sm text-blue-200 mb-4">You have a game in progress.</p>
+                                <button 
+                                    onClick={() => navigate(`/game/online?roomId=${lastActiveGameId}`)}
+                                    className="w-full py-3 bg-blue-500 hover:bg-blue-400 text-white rounded-xl font-semibold transition-all shadow-lg hover:shadow-blue-500/20"
+                                >
+                                    Rejoin Game
+                                </button>
+                                <button 
+                                    onClick={() => {
+                                        localStorage.removeItem('chess_last_active_room');
+                                        setLastActiveGameId(null);
+                                    }}
+                                    className="w-full mt-2 py-2 text-sm text-blue-300 hover:text-white transition-colors"
+                                >
+                                    Dismiss
+                                </button>
+                            </div>
+                        )}
+
                         <div className="bg-zinc-800/50 backdrop-blur-sm p-6 rounded-2xl shadow-2xl border border-zinc-700/50">
                             <h2 className="text-2xl font-semibold mb-5 flex items-center gap-2">
                                 <Users className="w-6 h-6 text-blue-400" />
