@@ -328,7 +328,7 @@ const Game = ({ mode, roomId }: GameProps) => {
                 
                 // Notify server that we are leaving the room
                 console.log(`Leaving game room: ${roomId}`);
-                socket.emit('leave_game', { roomId });
+                // socket.emit('leave_game', { roomId }); // Removed: Treating navigation as temporary disconnect, not resignation.
             };
         }
     }, [mode, socket, roomId]);
