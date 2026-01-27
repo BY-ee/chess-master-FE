@@ -37,8 +37,6 @@ const LobbyPage = () => {
         const handleConnect = () => {
             setIsConnected(true);
             console.log('Socket connected to lobby');
-            loadRooms();
-            loadActiveGames();
         };
 
         const handleDisconnect = () => {
@@ -56,8 +54,6 @@ const LobbyPage = () => {
 
         if (socket.connected) {
             setIsConnected(true);
-            loadRooms();
-            loadActiveGames();
         }
 
         return () => {
@@ -66,6 +62,14 @@ const LobbyPage = () => {
             socket.off('online_count', handleOnlineCount);
         };
     }, [socket]);
+
+    // Load data when connected
+    useEffect(() => {
+        if (isConnected) {
+            loadRooms();
+            loadActiveGames();
+        }
+    }, [isConnected]);
 
     const loadRooms = async () => {
         if (!isConnected) return;

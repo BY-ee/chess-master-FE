@@ -93,7 +93,6 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                     console.log('Game saved successfully');
                 }).catch((err) => {
                     console.error('Failed to save game', err);
-                    setIsSaved(false); // Retry possible?
                 });
             } else if (mode === 'online' && socket && roomId && !isSaved) {
                 // Determine if WE should report the result. usually both clients might emit, or just the winner, or server detects it.
