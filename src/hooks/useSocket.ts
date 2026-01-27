@@ -1,26 +1,25 @@
 import { useEffect, useState } from 'react';
 import { Socket } from 'socket.io-client';
-import { connectSocket, disconnectSocket, getSocket } from '../socket/socket';
+import { connectSocket } from '../socket/socket';
+import { useAuthStore } from '../store/useAuthStore';
 
 export const useSocket = () => {
   const [socket, setSocket] = useState<Socket | null>(null);
+  const token = useAuthStore((state) => state.token);
 
   useEffect(() => {
-    const socketInstance = connectSocket();
+    const socketInstance = connectSocket(token);
     setSocket(socketInstance);
     
     // Optional: Connect explicitly if autoConnect is false
-    if (!socketInstance.connected) {
+    if (socketInstance && !socketInstance.connected) {
         socketInstance.connect();
     }
 
     return () => {
       // Manage disconnection policy as needed. 
-      // For now, we might want to keep it open unless explicit logout, 
-      // but here we can disconnect on unmount of the root provider if we had one.
-      // Or just leave it managed by the singleton.
     };
-  }, []);
+  }, [token]);
 
   return socket;
 };
