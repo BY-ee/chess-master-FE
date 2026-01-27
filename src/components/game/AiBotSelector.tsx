@@ -26,21 +26,7 @@ const AiBotSelector: React.FC<AiBotSelectorProps> = ({ onSelect }) => {
                 // In a real scenario, we fetch this from API
                 // Assuming gameApi.getAiModels() is implemented and returns AiModel[]
                 const data = await gameApi.getAiModels();
-                
-                // Map API data to ensure types are correct for UI/Engine
-                const mappedData = data.map((model: AiModel) => {
-                    let type: AiModel['type'] = 'balanced';
-                    if (model.rating <= 1000) type = 'defensive';
-                    else if (model.rating >= 2000) type = 'aggressive';
-                    
-                    // If API returns generic 'stockfish' type, override it
-                    if (model.type === 'stockfish' as any || !['balanced', 'aggressive', 'defensive'].includes(model.type)) {
-                        return { ...model, type };
-                    }
-                    return model;
-                });
-                
-                setModels(mappedData);
+                setModels(data);
             } catch (error) {
                 console.error('Failed to fetch AI models', error);
                 
