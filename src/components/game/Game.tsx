@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
-import { getBestMove } from '../../engine/ai';
+import { stockfish } from '../../engine/stockfish';
 import { RefreshCw, Trophy, AlertTriangle, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { useSocket } from '../../hooks/useSocket';
 import { gameApi } from '../../api/gameApi';
@@ -370,17 +370,52 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
       const isAiTurn = game.turn() !== userColor;
 
       if (isAiTurn && !game.isGameOver() && isLatestMove) {
-        // AI thinking time simulation (can be dynamic based on depth)
-        const thinkingTime = Math.max(500, (aiModel?.config?.depth || 1) * 200);
+        let isMounted = true;
 
-        const timeoutId = setTimeout(() => {
-          // Use aiModel config if available
-          const aiMove = getBestMove(game, aiModel?.config);
-          if (aiMove) {
-            safeMakeAMove(aiMove);
-          }
-        }, thinkingTime);
-        return () => clearTimeout(timeoutId);
+        const makeAiMove = async () => {
+             // Configure generic difficulty if model provided
+             if (aiModel) {
+                 // Use ELO for realistic difficulty scaling
+                 // Stockfish supports UCI_Elo.
+                 await stockfish.setElo(aiModel.rating);
+
+                 // Attempt to set style via Contempt
+                 let contempt = 0;
+                 if (aiModel.type === 'aggressive') contempt = 50;
+                 else if (aiModel.type === 'defensive') contempt = -50;
+                 
+                 await stockfish.setContempt(contempt);
+             }
+
+             // Determine depth: Map rating to depth if needed, or use fixed depth
+             // For very low ratings, low depth is good to make it blunder more or play instantly.
+             // But UCI_Elo handles blunders better than just low depth.
+             // We'll use a dynamic depth based on rating to save resources for weak bots.
+             const depth = aiModel?.config?.depth || 10;
+             
+             // Small delay for UX (so it doesn't move instantly)
+             await new Promise(r => setTimeout(r, 500));
+             
+             if (!isMounted) return;
+
+             try {
+                 const bestMoveUci = await stockfish.getBestMove(game.fen(), depth);
+                 if (isMounted && bestMoveUci) {
+                     // Convert UCI to move object for chess.js to ensure validity
+                     const from = bestMoveUci.substring(0, 2);
+                     const to = bestMoveUci.substring(2, 4);
+                     const promotion = bestMoveUci.length > 4 ? bestMoveUci.substring(4, 5) : undefined;
+                     
+                     safeMakeAMove({ from, to, promotion });
+                 }
+             } catch (e) {
+                 console.error("Stockfish error:", e);
+             }
+        };
+        
+        makeAiMove();
+        
+        return () => { isMounted = false; };
       }
     }, [game, currentMoveIndex, history, userColor, mode, aiModel]);
 
@@ -535,24 +570,33 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
             {/* Left: Game Board Area */}
             <div className="flex flex-col items-center gap-6 w-full max-w-[600px]">
                 <div className="w-full flex justify-between items-center glass-panel p-4">
-                    <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${game.turn() === 'w' ? 'bg-green-500' : 'bg-gray-500'}`} />
-                        <span className="font-semibold text-lg">
-                            {gameStatus || (game.turn() === userColor ? `Your Turn (${userColor === 'w' ? 'White' : 'Black'})` : (mode === 'ai' ? "AI Thinking..." : "Opponent's Turn"))}
-                        </span>
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                             <div className={`w-3 h-3 rounded-full ${game.turn() === 'w' ? 'bg-green-500' : 'bg-gray-500'}`} />
+                             <span className="font-semibold text-lg">
+                                {gameStatus || (game.turn() === userColor ? `Your Turn (${userColor === 'w' ? 'White' : 'Black'})` : (mode === 'ai' ? "AI Thinking..." : "Opponent's Turn"))}
+                            </span>
+                        </div>
+                        {mode === 'ai' && aiModel && (
+                            <div className="text-xs text-zinc-400 flex items-center gap-2">
+                                <span className="font-medium text-zinc-300">Vs: {aiModel.name}</span>
+                                <span className="bg-zinc-700 px-1.5 py-0.5 rounded text-zinc-300 font-mono">{aiModel.rating}</span>
+                                <span className={`text-[10px] uppercase border px-1 rounded ${
+                                    aiModel.type === 'aggressive' ? 'border-red-500/30 text-red-400' :
+                                    aiModel.type === 'defensive' ? 'border-blue-500/30 text-blue-400' :
+                                    'border-green-500/30 text-green-400'
+                                }`}>{aiModel.type}</span>
+                            </div>
+                        )}
                     </div>
+
                     <button 
                         onClick={() => resetGame(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors font-medium"
+                        className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors font-medium text-sm"
                     >
-                        <RefreshCw size={18} />
+                        <RefreshCw size={16} />
                         New Game
                     </button>
-                    {mode === 'online' && (
-                        <div className="flex gap-2">
-                             {/* Small indicators or controls for rematch could go here, but main modal is better */}
-                        </div>
-                    )}
                 </div>
 
                 <div className="w-full aspect-square shadow-2xl rounded-lg overflow-hidden border-4 border-zinc-800 relative">

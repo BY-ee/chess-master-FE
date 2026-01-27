@@ -1,8 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { gameApi } from '../../api/gameApi';
-import { Trophy, Zap, Cpu, Award } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { Trophy, Zap, Cpu } from 'lucide-react';
 
 export interface AiModel {
     id: number;
@@ -27,18 +26,32 @@ const AiBotSelector: React.FC<AiBotSelectorProps> = ({ onSelect }) => {
                 // In a real scenario, we fetch this from API
                 // Assuming gameApi.getAiModels() is implemented and returns AiModel[]
                 const data = await gameApi.getAiModels();
-                setModels(data);
+                
+                // Map API data to ensure types are correct for UI/Engine
+                const mappedData = data.map((model: AiModel) => {
+                    let type: AiModel['type'] = 'balanced';
+                    if (model.rating <= 1000) type = 'defensive';
+                    else if (model.rating >= 2000) type = 'aggressive';
+                    
+                    // If API returns generic 'stockfish' type, override it
+                    if (model.type === 'stockfish' as any || !['balanced', 'aggressive', 'defensive'].includes(model.type)) {
+                        return { ...model, type };
+                    }
+                    return model;
+                });
+                
+                setModels(mappedData);
             } catch (error) {
                 console.error('Failed to fetch AI models', error);
                 
                 // Fallback / Seed Data if API fails or is not yet ready (for dev safety)
                 setModels([
                     { id: 1, name: "Newbie", description: "Just learned how to move pieces.", rating: 400, type: "balanced", config: { depth: 1 } },
-                    { id: 2, name: "Beginner", description: "Makes few mistakes but misses tactics.", rating: 800, type: "defensive", config: { depth: 2 } },
-                    { id: 3, name: "Intermediate", description: "Calculating a few moves ahead.", rating: 1200, type: "aggressive", config: { depth: 2 } },
-                    { id: 4, name: "Advanced", description: "Strong club player level.", rating: 1600, type: "balanced", config: { depth: 3 } },
-                    { id: 5, name: "Expert", description: "Very hard to beat.", rating: 2000, type: "balanced", config: { depth: 3 } }, // JS engine limit usually 3-4
-                    { id: 6, name: "Grandmaster", description: "Near perfect play (for this engine).", rating: 2400, type: "aggressive", config: { depth: 4 } },
+                    { id: 2, name: "Beginner", description: "Makes few mistakes but misses tactics.", rating: 800, type: "defensive", config: { depth: 3 } },
+                    { id: 3, name: "Intermediate", description: "Calculating a few moves ahead.", rating: 1200, type: "aggressive", config: { depth: 5 } },
+                    { id: 4, name: "Advanced", description: "Strong club player level.", rating: 1600, type: "balanced", config: { depth: 8 } },
+                    { id: 5, name: "Expert", description: "Very hard to beat.", rating: 2000, type: "balanced", config: { depth: 12 } },
+                    { id: 6, name: "Grandmaster", description: "Near perfect play.", rating: 2400, type: "aggressive", config: { depth: 15 } },
                 ]);
                 // Only show toast if it was a real error, but for now we might be using fallback intentionally until backend is live
                 // toast.error("Using offline bot profiles.");
