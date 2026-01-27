@@ -12,6 +12,8 @@ const queryClient = new QueryClient();
 import { useEffect } from 'react';
 import { authApi } from './api/authApi';
 
+import { Toaster } from 'react-hot-toast';
+
 function App() {
   const token = useAuthStore((state) => state.token);
   const login = useAuthStore((state) => state.login);
@@ -43,6 +45,15 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <Toaster 
+          position="top-center"
+          toastOptions={{
+            style: {
+              background: '#333',
+              color: '#fff',
+            },
+          }}
+        />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />

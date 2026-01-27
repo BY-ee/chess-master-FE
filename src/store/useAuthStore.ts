@@ -16,6 +16,8 @@ interface AuthState {
   logout: () => void;
 }
 
+import { disconnectSocket } from '../socket/socket';
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
@@ -28,6 +30,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
   logout: () => {
     localStorage.removeItem('token');
+    disconnectSocket();
     set({ user: null, isAuthenticated: false, token: null, isInitializing: false });
   },
 }));

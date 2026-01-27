@@ -1,12 +1,10 @@
 import { io, Socket } from 'socket.io-client';
 import { SOCKET_URL } from '../config';
-import { useAuthStore } from '../store/useAuthStore';
 
 let socket: Socket | null = null;
 
-export const connectSocket = () => {
-  if (!socket) {
-    const token = useAuthStore.getState().token;
+export const connectSocket = (token: string | null) => {
+  if (!socket && token) {
     socket = io(SOCKET_URL, {
       auth: { token },
       autoConnect: false,
@@ -15,9 +13,9 @@ export const connectSocket = () => {
   return socket;
 };
 
-export const getSocket = () => {
-  if (!socket) {
-    return connectSocket();
+export const getSocket = (token: string | null = null) => {
+  if (!socket && token) {
+    return connectSocket(token);
   }
   return socket;
 };

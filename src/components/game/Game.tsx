@@ -4,12 +4,17 @@ import { Chessboard } from 'react-chessboard';
 import { getBestMove } from '../../engine/ai';
 import { RefreshCw, Trophy, AlertTriangle, ChevronLeft, ChevronRight, History } from 'lucide-react';
 import { useSocket } from '../../hooks/useSocket';
+import { gameApi } from '../../api/gameApi';
+import { useAuthStore } from '../../store/useAuthStore';
+import toast from 'react-hot-toast';
 
 interface GameProps {
     mode: 'ai' | 'online';
+    roomId?: string;
+    aiModel?: import('./AiBotSelector').AiModel;
 }
 
-const Game = ({ mode }: GameProps) => {
+const Game = ({ mode, roomId, aiModel }: GameProps) => {
     // Game Logic State
     const [game, setGame] = useState(new Chess());
     
@@ -17,6 +22,20 @@ const Game = ({ mode }: GameProps) => {
     const [history, setHistory] = useState<{ fen: string; san: string }[]>([{ fen: new Chess().fen(), san: '' }]);
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [gameStatus, setGameStatus] = useState<string>('');
+    const [isSaved, setIsSaved] = useState(false);
+    // Rematch State
+    const [rematchRequested, setRematchRequested] = useState(false); // We sent request
+    const [rematchIncoming, setRematchIncoming] = useState<{ requestedBy: number; expiresAt: Date } | null>(null); // Opponent sent request
+    const rematchIncomingRef = useRef<{ requestedBy: number; expiresAt: Date } | null>(null); // Ref for socket access
+    const [timeLeft, setTimeLeft] = useState<number>(60);
+    const [isRematchDisabled, setIsRematchDisabled] = useState(false);
+    const [isRematchExpired, setIsRematchExpired] = useState(false);
+    const [rematchCooldown, setRematchCooldown] = useState(0); // Cooldown in seconds
+    const { user } = useAuthStore();
+    
+    // Waiting State (Synchronized Game Start)
+    const [isWaitingForOpponent, setIsWaitingForOpponent] = useState(mode === 'online'); // Default to waiting in online mode until confirmed
+
     
     // User Color State (Randomized on start for AI, determined by server for Online)
     const [userColor, setUserColor] = useState<'w' | 'b'>(() => Math.random() < 0.5 ? 'w' : 'b');
@@ -28,49 +47,287 @@ const Game = ({ mode }: GameProps) => {
     const gameRef = useRef(game);
     const historyRef = useRef(history);
     const indexRef = useRef(currentMoveIndex);
+    const userColorRef = useRef(userColor);
 
     useEffect(() => {
         gameRef.current = game;
         historyRef.current = history;
         indexRef.current = currentMoveIndex;
-    }, [game, history, currentMoveIndex]);
+        userColorRef.current = userColor;
+    }, [game, history, currentMoveIndex, userColor]);
 
     // Check Game Status
     useEffect(() => {
         if (game.isGameOver()) {
+            let status = '';
+            let winnerColor: 'w' | 'b' | undefined = undefined;
             if (game.isCheckmate()) {
-                const winnerColor = game.turn() === 'w' ? 'Black' : 'White';
-                const isUserWinner = (game.turn() === 'w' && userColor === 'b') || (game.turn() === 'b' && userColor === 'w');
-                setGameStatus(`Checkmate! ${winnerColor} wins! ${isUserWinner ? '(You Win!)' : '(You Lose!)'}`);
+                winnerColor = game.turn() === 'w' ? 'b' : 'w';
+                const winnerName = winnerColor === 'w' ? 'White' : 'Black';
+                const isUserWinner = userColor === winnerColor;
+                status = `Checkmate! ${winnerName} wins! ${isUserWinner ? '(You Win!)' : '(You Lose!)'}`;
+            
             } else if (game.isDraw()) {
-                setGameStatus('Draw!');
+                status = 'Draw!';
             } else {
-                setGameStatus('Game Over');
+                status = 'Game Over';
             }
+            setGameStatus(status);
+
+            // Save Game Result (AI Mode only - Online handled by server)
+            if (mode === 'ai' && !isSaved) {
+                const pgn = game.pgn();
+                setIsSaved(true);
+                gameApi.saveGameResult({
+                    mode: 'ai',
+                    winnerColor,
+                    userColor, // Passing the user's color
+                    pgn,
+                    opponentId: 'ai',
+                    aiModelId: aiModel?.id, // Link stats to specific bot
+                }).then(() => {
+                    console.log('Game saved successfully');
+                }).catch((err) => {
+                    console.error('Failed to save game', err);
+                });
+            } else if (mode === 'online' && socket && roomId && !isSaved) {
+                // Determine if WE should report the result. usually both clients might emit, or just the winner, or server detects it.
+                // Assuming server trusts client for now or validates moves.
+                // Better approach: Server detects checkmate/draw from move stream. 
+                // BUT, if we need to explicitly end it:
+                
+                // Only let one client or both send it, server handles idempotency.
+                setIsSaved(true);
+                socket.emit('game_end', {
+                    roomId,
+                    winnerColor, // 'w' | 'b' | undefined
+                    pgn: game.pgn()
+                });
+            }
+
         } else {
             setGameStatus('');
         }
-    }, [game, userColor]);
+    }, [game, userColor, mode, isSaved, socket, roomId]);
 
     // Socket Listeners (Online Mode)
     useEffect(() => {
-        if (mode === 'online' && socket) {
-            socket.on('move', (move: { from: string; to: string; promotion?: string }) => {
-                // Apply opponent's move
-                safeMakeAMove(move);
+        if (mode === 'online' && socket && roomId) {
+            
+            // Join the game room
+            console.log(`Joining game room: ${roomId}`);
+            socket.emit('join_game', { roomId });
+
+            // New Events for Synchronized Start
+            socket.on('player_joined', (data: { username: string, currentPlayers: number }) => {
+                console.log('Player joined:', data);
+                toast(`Player ${data.username} joined! (${data.currentPlayers}/2)`);
             });
 
-            socket.on('game_start', (data: { color: 'w' | 'b' }) => {
+            socket.on('player_left', (data: { username: string, currentPlayers: number }) => {
+                console.log('Player left:', data);
+                toast.error(`Player ${data.username} left the game.`);
+                if (data.currentPlayers < 2) {
+                    setIsWaitingForOpponent(true);
+                }
+            });
+
+            socket.on('game_ready', (data: { whiteId: number; blackId: number }) => {
+                console.log('Game Ready!', data);
+                setIsWaitingForOpponent(false);
+                toast.success('Game Started! Good luck.');
+            });
+
+
+            socket.on('move_made', (move: string) => {
+                // Apply opponent's move
+                console.log('Received move_made:', move);
+                // The server sends the move notation (SAN/UCI) string. 
+                // We pass it directly to safeMakeAMove which handles both string and object.
+                safeMakeAMove(move);
+            });
+            
+            socket.on('game_ended', (data: { result: '1-0' | '0-1' | '1/2-1/2', saved: boolean }) => {
+                // Server confirms game end and save.
+                console.log('Game ended event received:', data);
+                
+                // If we already saved/handled this game locally, do not re-open the modal
+                // This prevents "Ghost Modal" when opponent refreshes and re-triggers game_end
+                if (isSaved) return;
+
+                let winner: 'w' | 'b' | 'draw' = 'draw';
+                if (data.result === '1-0') winner = 'w';
+                else if (data.result === '0-1') winner = 'b';
+                
+                if (winner === 'draw') {
+                     setGameStatus('Game Over - Draw');
+                } else {
+                     const isUserWinner = winner === userColorRef.current;
+                     setGameStatus(isUserWinner ? 'You Win! (Online)' : 'You Lose! (Online)');
+                }
+                setIsSaved(true); // Stop local logic from trying to save again
+            });
+
+            // Rematch Listeners
+            socket.on('rematch_requested', (data: { requestedBy: number; expiresAt: Date }) => {
+                console.log('Rematch requested:', data);
+                if (user && String(data.requestedBy) !== String(user.id)) {
+                     // Calculate initial time left immediately to prevent visual jump
+                     const now = new Date().getTime();
+                     const expires = new Date(data.expiresAt).getTime();
+                     const initialSeconds = Math.max(0, Math.floor((expires - now) / 1000));
+                     setTimeLeft(initialSeconds);
+                     setRematchIncoming(data);
+                     rematchIncomingRef.current = data;
+                }
+            });
+
+            socket.on('game_restarted', (data: { whiteId: number; blackId: number }) => {
+                console.log('Game restarted!', data);
+                // Reset game locally
+                const newGame = new Chess();
+                setGame(newGame);
+                setHistory([{ fen: newGame.fen(), san: '' }]);
+                setCurrentMoveIndex(0);
+                setGameStatus('');
+                setIsSaved(false);
+                setRematchRequested(false);
+                setRematchIncoming(null);
+                rematchIncomingRef.current = null;
+                setIsRematchDisabled(false); // Reset disabled state on new game
+                setIsRematchExpired(false);
+                setRematchCooldown(0);
+                setIsWaitingForOpponent(false); // Ensure waiting overlay is gone on restart
+            });
+
+            socket.on('rematch_declined', (data: { declinedBy: number }) => {
+                console.log('Rematch declined:', data);
+                if (user && String(data.declinedBy) !== String(user.id)) {
+                    // Check if this was a cancellation of an incoming request or a rejection of our request
+                    const isCancellation = rematchIncomingRef.current && String(rematchIncomingRef.current.requestedBy) === String(data.declinedBy);
+                    
+                    if (isCancellation) {
+                         toast.success('Rematch request canceled by opponent.');
+                         // Do NOT disable button, as it was just a cancellation
+                    } else {
+                         toast.error('Rematch declined.');
+                         setIsRematchDisabled(true); // Disable button if opponent REJECTED our request
+                    }
+                }
+                setRematchRequested(false);
+                setRematchIncoming(null);
+                rematchIncomingRef.current = null;
+            });
+
+            socket.on('game_start', (data: { color: 'w' | 'b', fen?: string, pgn?: string }) => {
+                console.log('Game start!', data);
                 setUserColor(data.color);
-                resetGame(false); // Reset but keep color
+                userColorRef.current = data.color;
+                
+                // Only stop waiting immediately if we are restoring an ACTIVE game (has history)
+                // Otherwise (fresh game), we keep waiting until 'game_ready' which confirms both players are in
+                if (data.fen || data.pgn) {
+                    setIsWaitingForOpponent(false);
+                }
+                
+                if (data.fen || data.pgn) {
+                    console.log('Restoring game state from server...');
+                    const newGame = new Chess();
+                    try {
+                        let reconstructedHistory: { fen: string; san: string }[] = [{ fen: new Chess().fen(), san: '' }];
+
+                        if (data.pgn) {
+                            newGame.loadPgn(data.pgn);
+                            
+                            // Reconstruct history array for UI
+                            const tempGame = new Chess();
+                            const moves = newGame.history({ verbose: true });
+                            
+                            moves.forEach(move => {
+                                tempGame.move(move);
+                                reconstructedHistory.push({
+                                    fen: tempGame.fen(),
+                                    san: move.san
+                                });
+                            });
+                        } else if (data.fen) {
+                            newGame.load(data.fen);
+                            // If only FEN is provided, we can't reconstruct move history, only final state
+                            reconstructedHistory.push({ fen: newGame.fen(), san: '' });
+                        }
+                        
+                        setGame(newGame);
+                        setHistory(reconstructedHistory);
+                        setCurrentMoveIndex(reconstructedHistory.length - 1);
+                    } catch (e) {
+                        console.error('Failed to load remote state:', e);
+                        resetGame(false);
+                    }
+                } else {
+                    resetGame(false); // Reset but keep color
+                }
+            });
+            
+            // Handle join errors or full room
+            // Handle join errors or full room
+            // Refactored to use Standard Codes as per Backend Update (2026-01-05)
+            socket.on('error', (error: any) => {
+                console.error('Socket error:', error);
+                
+                // Backend now sends { code, message } object
+                // Fallback for string errors just in case
+                const errCode = error.code || 'GENERIC_ERROR';
+                const errMsg = error.message || (typeof error === 'string' ? error : JSON.stringify(error));
+
+                switch (errCode) {
+                    case 'ROOM_EXPIRED':
+                    case 'ROOM_NOT_FOUND':
+                    case 'REMATCH_EXPIRED':
+                        toast.error(`Cannot start rematch: ${errMsg}`);
+                        setRematchRequested(false);
+                        setRematchIncoming(null);
+                        setIsRematchExpired(true);
+                        break;
+                    case 'NO_REMATCH_REQUEST':
+                    case 'INVALID_ACTION':
+                        toast.error(`Action failed: ${errMsg}`);
+                        // Don't disable rematch, just reset request state
+                        setRematchRequested(false);
+                        setRematchIncoming(null);
+                        break;
+                    default:
+                        // Handle legacy string errors (Room expired, etc) for backward compatibility or unexpected errors
+                         if (errMsg.includes('expired') || errMsg.includes('not found') || errMsg.includes('valid for rematch')) {
+                             toast.error(`Cannot start rematch: ${errMsg}`);
+                             setRematchRequested(false);
+                             setRematchIncoming(null);
+                             setIsRematchExpired(true);
+                         } else {
+                             toast.error(`Game Error: ${errMsg}`);
+                         }
+                        break;
+                }
             });
 
             return () => {
-                socket.off('move');
+                socket.off('move_made');
                 socket.off('game_start');
+                socket.off('game_ended');
+                socket.off('rematch_requested');
+                socket.off('game_restarted');
+                socket.off('rematch_declined');
+                socket.off('rematch_declined');
+                socket.off('player_joined');
+                socket.off('player_left');
+                socket.off('game_ready');
+                socket.off('error');
+                
+                // Notify server that we are leaving the room
+                console.log(`Leaving game room: ${roomId}`);
+                // socket.emit('leave_game', { roomId }); // Removed: Treating navigation as temporary disconnect, not resignation.
             };
         }
-    }, [mode, socket]);
+    }, [mode, socket, roomId]);
 
     // Keyboard Navigation
     useEffect(() => {
@@ -88,7 +345,7 @@ const Game = ({ mode }: GameProps) => {
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, []);
 
-    const safeMakeAMove = (move: string | { from: string; to: string; promotion?: string }, isSocketEvents = false) => {
+    const safeMakeAMove = (move: string | { from: string; to: string; promotion?: string }) => {
         try {
             const gameCopy = new Chess(gameRef.current.fen());
             const result = gameCopy.move(move);
@@ -108,22 +365,51 @@ const Game = ({ mode }: GameProps) => {
     // AI Turn Logic
     useEffect(() => {
       if (mode !== 'ai') return;
-
-      // Run AI if it's NOT user's turn, game not over, AND we are viewing the latest move.
+      
       const isLatestMove = currentMoveIndex === history.length - 1;
       const isAiTurn = game.turn() !== userColor;
 
       if (isAiTurn && !game.isGameOver() && isLatestMove) {
-        // Add a small delay for realism
+        // AI thinking time simulation (can be dynamic based on depth)
+        const thinkingTime = Math.max(500, (aiModel?.config?.depth || 1) * 200);
+
         const timeoutId = setTimeout(() => {
-          const aiMove = getBestMove(game);
+          // Use aiModel config if available
+          const aiMove = getBestMove(game, aiModel?.config);
           if (aiMove) {
             safeMakeAMove(aiMove);
           }
-        }, 500);
+        }, thinkingTime);
         return () => clearTimeout(timeoutId);
       }
-    }, [game, currentMoveIndex, history, userColor, mode]);
+    }, [game, currentMoveIndex, history, userColor, mode, aiModel]);
+
+    // Rematch Timer Logic
+    useEffect(() => {
+        if (!rematchIncoming) return;
+
+        const interval = setInterval(() => {
+             const now = new Date().getTime();
+             const expires = new Date(rematchIncoming.expiresAt).getTime();
+             const seconds = Math.max(0, Math.floor((expires - now) / 1000));
+             setTimeLeft(seconds);
+             
+             if (seconds <= 0) {
+                 setRematchIncoming(null); // Auto close if expired
+                 rematchIncomingRef.current = null;
+             }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [rematchIncoming]);
+
+    // Rematch Cooldown Timer
+    useEffect(() => {
+        if (rematchCooldown > 0) {
+            const timer = setTimeout(() => setRematchCooldown(c => c - 1), 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [rematchCooldown]);
 
     const onDrop = (sourceSquare: string, targetSquare: string) => {
         // Prevent moves if reviewing past history
@@ -149,8 +435,12 @@ const Game = ({ mode }: GameProps) => {
 
         const move = safeMakeAMove(moveData);
 
-        if (move && mode === 'online' && socket) {
-            socket.emit('move', moveData);
+        if (move && mode === 'online' && socket && roomId) {
+            console.log('Sending move:', moveData);
+            socket.emit('make_move', {
+                roomId,
+                move: move.san
+            });
         }
 
         return move !== null;
@@ -162,8 +452,45 @@ const Game = ({ mode }: GameProps) => {
         setHistory([{ fen: newGame.fen(), san: '' }]);
         setCurrentMoveIndex(0);
         setGameStatus('');
+        setIsSaved(false);
         if (randomizeColor && mode === 'ai') {
              setUserColor(Math.random() < 0.5 ? 'w' : 'b');
+        }
+        setRematchRequested(false);
+        setRematchIncoming(null);
+    };
+
+    const handleRematchRequest = () => {
+        if (mode === 'online' && socket && roomId) {
+            socket.emit('request_rematch', { roomId });
+            setRematchRequested(true);
+        }
+    };
+
+    const handleAcceptRematch = () => {
+        if (mode === 'online' && socket && roomId) {
+            socket.emit('accept_rematch', { roomId });
+            setRematchIncoming(null); // Clear modal, wait for restart
+            rematchIncomingRef.current = null;
+        }
+    };
+
+    const handleDeclineRematch = () => {
+        if (mode === 'online' && socket && roomId) {
+             socket.emit('decline_rematch', { roomId });
+             setRematchIncoming(null);
+             rematchIncomingRef.current = null;
+             setRematchRequested(false); // Also cancel if we sent one? No, this handles incoming.
+        }
+    };
+    
+    // Allow cancelling our own request
+    const handleCancelRematch = () => {
+        if (mode === 'online' && socket && roomId) {
+             socket.emit('decline_rematch', { roomId }); // Same event for cancel
+             setRematchRequested(false);
+             // Verify if we should add cooldown? Yes, to prevent spam.
+             setRematchCooldown(5); // 5 seconds cooldown
         }
     };
 
@@ -221,6 +548,11 @@ const Game = ({ mode }: GameProps) => {
                         <RefreshCw size={18} />
                         New Game
                     </button>
+                    {mode === 'online' && (
+                        <div className="flex gap-2">
+                             {/* Small indicators or controls for rematch could go here, but main modal is better */}
+                        </div>
+                    )}
                 </div>
 
                 <div className="w-full aspect-square shadow-2xl rounded-lg overflow-hidden border-4 border-zinc-800 relative">
@@ -231,8 +563,17 @@ const Game = ({ mode }: GameProps) => {
                         customDarkSquareStyle={{ backgroundColor: '#769656' }}
                         customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
                         animationDuration={200}
-                        arePiecesDraggable={currentMoveIndex === history.length - 1 && game.turn() === userColor} // Only drag if latest and user turn
+                        arePiecesDraggable={!isWaitingForOpponent && currentMoveIndex === history.length - 1 && game.turn() === userColor} // Only drag if active, latest, and user turn
                     />
+                    
+                    {/* Waiting For Opponent Overlay */}
+                    {isWaitingForOpponent && !gameStatus && (
+                        <div className="absolute inset-0 z-40 bg-black/50 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-in fade-in duration-500">
+                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
+                             <h3 className="text-xl font-bold">Waiting for opponent...</h3>
+                             <p className="text-zinc-300 text-sm mt-2">The game will start when both players connect.</p>
+                        </div>
+                    )}
                     
                     {/* Replay Overlay Indicator */}
                     {currentMoveIndex !== history.length - 1 && (
@@ -321,11 +662,61 @@ const Game = ({ mode }: GameProps) => {
                     {game.isCheckmate() ? <Trophy size={48} className="text-yellow-500" /> : <AlertTriangle size={48} className="text-zinc-400" />}
                     <h2 className="text-2xl font-bold">{gameStatus}</h2>
                     <button 
-                        onClick={() => resetGame(true)}
-                        className="px-6 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold text-lg transition-transform hover:scale-105"
+                        onClick={() => {
+                            if (mode === 'online') {
+                                if (rematchRequested) handleCancelRematch();
+                                else handleRematchRequest();
+                            }
+                            else resetGame(true);
+                        }}
+                        disabled={isRematchDisabled || isRematchExpired || rematchCooldown > 0}
+                        className={`px-6 py-3 rounded-xl font-bold text-lg transition-transform hover:scale-105 ${
+                            isRematchDisabled || isRematchExpired || rematchCooldown > 0
+                                ? 'bg-zinc-700 cursor-not-allowed opacity-50' 
+                                : rematchRequested ? 'bg-zinc-600 hover:bg-red-600' : 'bg-green-600 hover:bg-green-500'
+                        }`}
                     >
-                        Play Again
+                        {mode === 'online' 
+                            ? (isRematchExpired
+                                ? 'Room Expired'
+                                : isRematchDisabled 
+                                    ? 'Rematch Declined' 
+                                    : rematchCooldown > 0
+                                        ? `Wait ${rematchCooldown}s`
+                                        : rematchRequested ? 'Cancel Request' : 'Rematch') 
+                            : 'Play Again'}
                     </button>
+                    {mode === 'online' && (
+                        <button 
+                             onClick={() => setGameStatus('')} // Just close the modal to view board
+                             className="text-zinc-400 hover:text-white text-sm mt-3 underline"
+                        >
+                            Close Menu (View Board)
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {/* Rematch Incoming Modal */}
+            {rematchIncoming && (
+                <div className="glass-panel p-6 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-4 shadow-2xl z-50 animate-in fade-in zoom-in duration-300 border border-yellow-500/50">
+                    <Trophy size={48} className="text-yellow-500 animate-pulse" />
+                    <h2 className="text-2xl font-bold text-center">Opponent wants a Rematch!</h2>
+                    <p className="text-zinc-400">Time remaining: {timeLeft}s</p>
+                    <div className="flex gap-4">
+                        <button 
+                            onClick={handleAcceptRematch}
+                            className="px-6 py-3 bg-green-600 hover:bg-green-500 rounded-xl font-bold text-lg transition-transform hover:scale-105"
+                        >
+                            Accept
+                        </button>
+                        <button 
+                            onClick={handleDeclineRematch}
+                            className="px-6 py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold text-lg transition-transform hover:scale-105"
+                        >
+                            Decline
+                        </button>
+                    </div>
                 </div>
             )}
         </div>
