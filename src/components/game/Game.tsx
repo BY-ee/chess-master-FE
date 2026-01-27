@@ -6,7 +6,7 @@ import { RefreshCw, Trophy, AlertTriangle, ChevronLeft, ChevronRight, History } 
 import { useSocket } from '../../hooks/useSocket';
 import { gameApi } from '../../api/gameApi';
 import { useAuthStore } from '../../store/useAuthStore';
-
+import toast from 'react-hot-toast';
 
 interface GameProps {
     mode: 'ai' | 'online';
@@ -60,21 +60,17 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
     useEffect(() => {
         if (game.isGameOver()) {
             let status = '';
-
             let winnerColor: 'w' | 'b' | undefined = undefined;
-
             if (game.isCheckmate()) {
                 winnerColor = game.turn() === 'w' ? 'b' : 'w';
                 const winnerName = winnerColor === 'w' ? 'White' : 'Black';
                 const isUserWinner = userColor === winnerColor;
                 status = `Checkmate! ${winnerName} wins! ${isUserWinner ? '(You Win!)' : '(You Lose!)'}`;
-
+            
             } else if (game.isDraw()) {
                 status = 'Draw!';
-
             } else {
                 status = 'Game Over';
-
             }
             setGameStatus(status);
 
@@ -112,19 +108,229 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
         } else {
             setGameStatus('');
         }
-    }, [game, userColor, mode, isSaved, socket, roomId, aiModel]); // Added aiModel dependency
+    }, [game, userColor, mode, isSaved, socket, roomId]);
 
     // Socket Listeners (Online Mode)
     useEffect(() => {
-         // ... (Online logic unchanged)
-         if (mode === 'online' && socket && roomId) {
-             // ... socket setup
-         }
+        if (mode === 'online' && socket && roomId) {
+            
+            // Join the game room
+            console.log(`Joining game room: ${roomId}`);
+            socket.emit('join_game', { roomId });
+
+            // New Events for Synchronized Start
+            socket.on('player_joined', (data: { username: string, currentPlayers: number }) => {
+                console.log('Player joined:', data);
+                toast(`Player ${data.username} joined! (${data.currentPlayers}/2)`);
+            });
+
+            socket.on('player_left', (data: { username: string, currentPlayers: number }) => {
+                console.log('Player left:', data);
+                toast.error(`Player ${data.username} left the game.`);
+                if (data.currentPlayers < 2) {
+                    setIsWaitingForOpponent(true);
+                }
+            });
+
+            socket.on('game_ready', (data: { whiteId: number; blackId: number }) => {
+                console.log('Game Ready!', data);
+                setIsWaitingForOpponent(false);
+                toast.success('Game Started! Good luck.');
+            });
+
+
+            socket.on('move_made', (move: string) => {
+                // Apply opponent's move
+                console.log('Received move_made:', move);
+                // The server sends the move notation (SAN/UCI) string. 
+                // We pass it directly to safeMakeAMove which handles both string and object.
+                safeMakeAMove(move);
+            });
+            
+            socket.on('game_ended', (data: { result: '1-0' | '0-1' | '1/2-1/2', saved: boolean }) => {
+                // Server confirms game end and save.
+                console.log('Game ended event received:', data);
+                
+                // If we already saved/handled this game locally, do not re-open the modal
+                // This prevents "Ghost Modal" when opponent refreshes and re-triggers game_end
+                if (isSaved) return;
+
+                let winner: 'w' | 'b' | 'draw' = 'draw';
+                if (data.result === '1-0') winner = 'w';
+                else if (data.result === '0-1') winner = 'b';
+                
+                if (winner === 'draw') {
+                     setGameStatus('Game Over - Draw');
+                } else {
+                     const isUserWinner = winner === userColorRef.current;
+                     setGameStatus(isUserWinner ? 'You Win! (Online)' : 'You Lose! (Online)');
+                }
+                setIsSaved(true); // Stop local logic from trying to save again
+            });
+
+            // Rematch Listeners
+            socket.on('rematch_requested', (data: { requestedBy: number; expiresAt: Date }) => {
+                console.log('Rematch requested:', data);
+                if (user && String(data.requestedBy) !== String(user.id)) {
+                     // Calculate initial time left immediately to prevent visual jump
+                     const now = new Date().getTime();
+                     const expires = new Date(data.expiresAt).getTime();
+                     const initialSeconds = Math.max(0, Math.floor((expires - now) / 1000));
+                     setTimeLeft(initialSeconds);
+                     setRematchIncoming(data);
+                     rematchIncomingRef.current = data;
+                }
+            });
+
+            socket.on('game_restarted', (data: { whiteId: number; blackId: number }) => {
+                console.log('Game restarted!', data);
+                // Reset game locally
+                const newGame = new Chess();
+                setGame(newGame);
+                setHistory([{ fen: newGame.fen(), san: '' }]);
+                setCurrentMoveIndex(0);
+                setGameStatus('');
+                setIsSaved(false);
+                setRematchRequested(false);
+                setRematchIncoming(null);
+                rematchIncomingRef.current = null;
+                setIsRematchDisabled(false); // Reset disabled state on new game
+                setIsRematchExpired(false);
+                setRematchCooldown(0);
+                setIsWaitingForOpponent(false); // Ensure waiting overlay is gone on restart
+            });
+
+            socket.on('rematch_declined', (data: { declinedBy: number }) => {
+                console.log('Rematch declined:', data);
+                if (user && String(data.declinedBy) !== String(user.id)) {
+                    // Check if this was a cancellation of an incoming request or a rejection of our request
+                    const isCancellation = rematchIncomingRef.current && String(rematchIncomingRef.current.requestedBy) === String(data.declinedBy);
+                    
+                    if (isCancellation) {
+                         toast.success('Rematch request canceled by opponent.');
+                         // Do NOT disable button, as it was just a cancellation
+                    } else {
+                         toast.error('Rematch declined.');
+                         setIsRematchDisabled(true); // Disable button if opponent REJECTED our request
+                    }
+                }
+                setRematchRequested(false);
+                setRematchIncoming(null);
+                rematchIncomingRef.current = null;
+            });
+
+            socket.on('game_start', (data: { color: 'w' | 'b', fen?: string, pgn?: string }) => {
+                console.log('Game start!', data);
+                setUserColor(data.color);
+                userColorRef.current = data.color;
+                
+                // Only stop waiting immediately if we are restoring an ACTIVE game (has history)
+                // Otherwise (fresh game), we keep waiting until 'game_ready' which confirms both players are in
+                if (data.fen || data.pgn) {
+                    setIsWaitingForOpponent(false);
+                }
+                
+                if (data.fen || data.pgn) {
+                    console.log('Restoring game state from server...');
+                    const newGame = new Chess();
+                    try {
+                        let reconstructedHistory: { fen: string; san: string }[] = [{ fen: new Chess().fen(), san: '' }];
+
+                        if (data.pgn) {
+                            newGame.loadPgn(data.pgn);
+                            
+                            // Reconstruct history array for UI
+                            const tempGame = new Chess();
+                            const moves = newGame.history({ verbose: true });
+                            
+                            moves.forEach(move => {
+                                tempGame.move(move);
+                                reconstructedHistory.push({
+                                    fen: tempGame.fen(),
+                                    san: move.san
+                                });
+                            });
+                        } else if (data.fen) {
+                            newGame.load(data.fen);
+                            // If only FEN is provided, we can't reconstruct move history, only final state
+                            reconstructedHistory.push({ fen: newGame.fen(), san: '' });
+                        }
+                        
+                        setGame(newGame);
+                        setHistory(reconstructedHistory);
+                        setCurrentMoveIndex(reconstructedHistory.length - 1);
+                    } catch (e) {
+                        console.error('Failed to load remote state:', e);
+                        resetGame(false);
+                    }
+                } else {
+                    resetGame(false); // Reset but keep color
+                }
+            });
+            
+            // Handle join errors or full room
+            // Handle join errors or full room
+            // Refactored to use Standard Codes as per Backend Update (2026-01-05)
+            socket.on('error', (error: any) => {
+                console.error('Socket error:', error);
+                
+                // Backend now sends { code, message } object
+                // Fallback for string errors just in case
+                const errCode = error.code || 'GENERIC_ERROR';
+                const errMsg = error.message || (typeof error === 'string' ? error : JSON.stringify(error));
+
+                switch (errCode) {
+                    case 'ROOM_EXPIRED':
+                    case 'ROOM_NOT_FOUND':
+                    case 'REMATCH_EXPIRED':
+                        toast.error(`Cannot start rematch: ${errMsg}`);
+                        setRematchRequested(false);
+                        setRematchIncoming(null);
+                        setIsRematchExpired(true);
+                        break;
+                    case 'NO_REMATCH_REQUEST':
+                    case 'INVALID_ACTION':
+                        toast.error(`Action failed: ${errMsg}`);
+                        // Don't disable rematch, just reset request state
+                        setRematchRequested(false);
+                        setRematchIncoming(null);
+                        break;
+                    default:
+                        // Handle legacy string errors (Room expired, etc) for backward compatibility or unexpected errors
+                         if (errMsg.includes('expired') || errMsg.includes('not found') || errMsg.includes('valid for rematch')) {
+                             toast.error(`Cannot start rematch: ${errMsg}`);
+                             setRematchRequested(false);
+                             setRematchIncoming(null);
+                             setIsRematchExpired(true);
+                         } else {
+                             toast.error(`Game Error: ${errMsg}`);
+                         }
+                        break;
+                }
+            });
+
+            return () => {
+                socket.off('move_made');
+                socket.off('game_start');
+                socket.off('game_ended');
+                socket.off('rematch_requested');
+                socket.off('game_restarted');
+                socket.off('rematch_declined');
+                socket.off('rematch_declined');
+                socket.off('player_joined');
+                socket.off('player_left');
+                socket.off('game_ready');
+                socket.off('error');
+                
+                // Notify server that we are leaving the room
+                console.log(`Leaving game room: ${roomId}`);
+                // socket.emit('leave_game', { roomId }); // Removed: Treating navigation as temporary disconnect, not resignation.
+            };
+        }
     }, [mode, socket, roomId]);
 
     // Keyboard Navigation
     useEffect(() => {
-        // ... (Keyboard logic unchanged)
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'ArrowLeft') {
                 const newIndex = Math.max(0, indexRef.current - 1);
