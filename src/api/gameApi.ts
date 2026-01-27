@@ -4,11 +4,11 @@ import { useAuthStore } from '../store/useAuthStore';
 
 export interface SaveGameRequest {
     mode: 'ai' | 'online';
-    result?: 'win' | 'loss' | 'draw'; // DEPRECATED: Backend ignores this field and derives from winnerColor
     winnerColor?: 'w' | 'b'; // Required for non-draw games
     userColor: 'w' | 'b'; // REQUIRED: To identify if user played white or black
     pgn: string;
     opponentId?: string; // 'ai' or user UUID
+    aiModelId?: number; // Optional, for AI games to link stats
     metadata?: Record<string, any>; // Difficulty, etc.
 }
 
@@ -22,6 +22,19 @@ const getAuthHeaders = () => {
 };
 
 export const gameApi = {
+    // AI Models
+    getAiModels: async () => {
+        try {
+            const response = await axios.get(`${API_URL}/ai/models`, {
+                headers: getAuthHeaders(),
+            });
+            return response.data; // Expected: AiModel[]
+        } catch (error) {
+            console.error('Failed to fetch AI models:', error);
+            throw error;
+        }
+    },
+
     saveGameResult: async (data: SaveGameRequest) => {
         try {
             const response = await axios.post(`${API_URL}/games`, data, {

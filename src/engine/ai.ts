@@ -192,10 +192,18 @@ const minimax = (
   }
 };
 
-export const getBestMove = (game: Chess): string | null => {
+// Config interface for AI
+export interface AiConfig {
+  depth?: number;
+}
+
+export const getBestMove = (game: Chess, config: AiConfig = {}): string | null => {
   nodesExplored = 0;
   const startTime = performance.now();
   
+  // Use config depth or default
+  const depth = config.depth || MAX_DEPTH;
+
   const potentialMoves = game.moves();
   if (potentialMoves.length === 0) return null;
 
@@ -232,7 +240,7 @@ export const getBestMove = (game: Chess): string | null => {
   for (const move of potentialMoves) {
     game.move(move);
     // Recursively call minimax
-    const boardValue = minimax(game, MAX_DEPTH - 1, alpha, beta, !isWhiteTurn);
+    const boardValue = minimax(game, depth - 1, alpha, beta, !isWhiteTurn);
     game.undo();
 
     if (isWhiteTurn) {
@@ -251,7 +259,7 @@ export const getBestMove = (game: Chess): string | null => {
   }
 
   const endTime = performance.now();
-  console.log(`[AI] Best Move: ${bestMove}, Value: ${bestValue}, Nodes: ${nodesExplored}, Time: ${(endTime - startTime).toFixed(2)}ms`);
+  console.log(`[AI] Best Move: ${bestMove}, Value: ${bestValue}, Nodes: ${nodesExplored}, Time: ${(endTime - startTime).toFixed(2)}ms, Depth: ${depth}`);
 
   return bestMove || potentialMoves[Math.floor(Math.random() * potentialMoves.length)];
 };
