@@ -367,49 +367,7 @@ const LobbyPage = () => {
                 </div>
             )}
 
-            <style>{`
-                .custom-scrollbar::-webkit-scrollbar {
-                    width: 8px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                    background: rgba(39, 39, 42, 0.3);
-                    border-radius: 4px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: rgba(113, 113, 122, 0.5);
-                    border-radius: 4px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-                    background: rgba(161, 161, 170, 0.7);
-                }
-                @keyframes zoom-in {
-                    from {
-                        transform: scale(0.95);
-                        opacity: 0;
-                    }
-                    to {
-                        transform: scale(1);
-                        opacity: 1;
-                    }
-                }
-                @keyframes fade-in {
-                    from {
-                        opacity: 0;
-                    }
-                    to {
-                        opacity: 1;
-                    }
-                }
-                .animate-in {
-                    animation-fill-mode: both;
-                }
-                .zoom-in {
-                    animation-name: zoom-in;
-                }
-                .fade-in {
-                    animation-name: fade-in;
-                }
-            `}</style>
+
         </div>
     );
 };
