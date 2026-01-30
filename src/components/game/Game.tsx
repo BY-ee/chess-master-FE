@@ -578,14 +578,39 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                             </span>
                         </div>
                         {mode === 'ai' && aiModel && (
-                            <div className="text-xs text-zinc-400 flex items-center gap-2">
-                                <span className="font-medium text-zinc-300">Vs: {aiModel.name}</span>
-                                <span className="bg-zinc-700 px-1.5 py-0.5 rounded text-zinc-300 font-mono">{aiModel.rating}</span>
-                                <span className={`text-[10px] uppercase border px-1 rounded ${
-                                    aiModel.type === 'aggressive' ? 'border-red-500/30 text-red-400' :
-                                    aiModel.type === 'defensive' ? 'border-blue-500/30 text-blue-400' :
-                                    'border-green-500/30 text-green-400'
-                                }`}>{aiModel.type}</span>
+                            <div className="flex items-center gap-3 mt-1">
+                                {/* Bot Avatar in Header */}
+                                <div className="w-8 h-8 rounded-full bg-zinc-700 overflow-hidden relative border border-zinc-600">
+                                     {/* Fallback Initials/Icon */}
+                                     {!aiModel.name ? <div className="w-full h-full bg-zinc-600" /> : null}
+                                     <img 
+                                        src={(() => {
+                                            const imageMap: Record<string, string> = {
+                                                 "Rookie Ralph (Defensive)": "bot_ralph.png",
+                                                 "Careful Carla (Defensive)": "bot_carla.png",
+                                                 "Balanced Ben (Balanced)": "bot_ben.png",
+                                                 "Aggressive Alex (Aggressive)": "bot_alex.png",
+                                                 "Strategic Sarah (Balanced)": "bot_sarah.png",
+                                                 "Tactical Tom (Aggressive)": "bot_tom.png",
+                                                 "Master Mike (Aggressive)": "bot_mike.png",
+                                                 "Grandmaster (Balanced)": "bot_grandmaster.png"
+                                            };
+                                            return `/images/bots/${imageMap[aiModel.name] || encodeURIComponent(aiModel.name) + '.png'}`;
+                                        })()}
+                                        alt={aiModel.name}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                     />
+                                </div>
+                                <div className="text-xs text-zinc-400 flex items-center gap-2">
+                                    <span className="font-medium text-zinc-300">Vs: {aiModel.name}</span>
+                                    <span className="bg-zinc-700 px-1.5 py-0.5 rounded text-zinc-300 font-mono">{aiModel.rating}</span>
+                                    <span className={`text-[10px] uppercase border px-1 rounded ${
+                                        aiModel.type === 'aggressive' ? 'border-red-500/30 text-red-400' :
+                                        aiModel.type === 'defensive' ? 'border-blue-500/30 text-blue-400' :
+                                        'border-green-500/30 text-green-400'
+                                    }`}>{aiModel.type}</span>
+                                </div>
                             </div>
                         )}
                     </div>
