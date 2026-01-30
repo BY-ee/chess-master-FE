@@ -584,19 +584,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                                      {/* Fallback Initials/Icon */}
                                      {!aiModel.name ? <div className="w-full h-full bg-zinc-600" /> : null}
                                      <img 
-                                        src={(() => {
-                                            const imageMap: Record<string, string> = {
-                                                 "Rookie Ralph (Defensive)": "bot_ralph.png",
-                                                 "Careful Carla (Defensive)": "bot_carla.png",
-                                                 "Balanced Ben (Balanced)": "bot_ben.png",
-                                                 "Aggressive Alex (Aggressive)": "bot_alex.png",
-                                                 "Strategic Sarah (Balanced)": "bot_sarah.png",
-                                                 "Tactical Tom (Aggressive)": "bot_tom.png",
-                                                 "Master Mike (Aggressive)": "bot_mike.png",
-                                                 "Grandmaster (Balanced)": "bot_grandmaster.png"
-                                            };
-                                            return `/images/bots/${imageMap[aiModel.name] || encodeURIComponent(aiModel.name) + '.png'}`;
-                                        })()}
+                                        src={aiModel.imageUrl}
                                         alt={aiModel.name}
                                         className="w-full h-full object-cover"
                                         onError={(e) => { e.currentTarget.style.display = 'none'; }}

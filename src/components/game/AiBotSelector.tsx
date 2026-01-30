@@ -9,6 +9,7 @@ export interface AiModel {
     description: string;
     rating: number;
     type: 'balanced' | 'aggressive' | 'defensive';
+    imageUrl: string;
     config: { depth: number; [key: string]: any };
 }
 
@@ -32,15 +33,13 @@ const AiBotSelector: React.FC<AiBotSelectorProps> = ({ onSelect }) => {
                 
                 // Fallback / Seed Data if API fails or is not yet ready (for dev safety)
                 setModels([
-                    { id: 1, name: "Newbie", description: "Just learned how to move pieces.", rating: 400, type: "balanced", config: { depth: 1 } },
-                    { id: 2, name: "Beginner", description: "Makes few mistakes but misses tactics.", rating: 800, type: "defensive", config: { depth: 3 } },
-                    { id: 3, name: "Intermediate", description: "Calculating a few moves ahead.", rating: 1200, type: "aggressive", config: { depth: 5 } },
-                    { id: 4, name: "Advanced", description: "Strong club player level.", rating: 1600, type: "balanced", config: { depth: 8 } },
-                    { id: 5, name: "Expert", description: "Very hard to beat.", rating: 2000, type: "balanced", config: { depth: 12 } },
-                    { id: 6, name: "Grandmaster", description: "Near perfect play.", rating: 2400, type: "aggressive", config: { depth: 15 } },
+                    { id: 1, name: "Newbie", description: "Just learned how to move pieces.", rating: 400, type: "balanced", imageUrl: "", config: { depth: 1 } },
+                    { id: 2, name: "Beginner", description: "Makes few mistakes but misses tactics.", rating: 800, type: "defensive", imageUrl: "", config: { depth: 3 } },
+                    { id: 3, name: "Intermediate", description: "Calculating a few moves ahead.", rating: 1200, type: "aggressive", imageUrl: "", config: { depth: 5 } },
+                    { id: 4, name: "Advanced", description: "Strong club player level.", rating: 1600, type: "balanced", imageUrl: "", config: { depth: 8 } },
+                    { id: 5, name: "Expert", description: "Very hard to beat.", rating: 2000, type: "balanced", imageUrl: "", config: { depth: 12 } },
+                    { id: 6, name: "Grandmaster", description: "Near perfect play.", rating: 2400, type: "aggressive", imageUrl: "", config: { depth: 15 } },
                 ]);
-                // Only show toast if it was a real error, but for now we might be using fallback intentionally until backend is live
-                // toast.error("Using offline bot profiles.");
             } finally {
                 setLoading(false);
             }
@@ -57,28 +56,6 @@ const AiBotSelector: React.FC<AiBotSelectorProps> = ({ onSelect }) => {
             </div>
         );
     }
-
-    const getBotImage = (name: string) => {
-        // Map API specific names to local filenames
-        const imageMap: Record<string, string> = {
-            "Rookie Ralph (Defensive)": "bot_ralph.png",
-            "Careful Carla (Defensive)": "bot_carla.png",
-            "Balanced Ben (Balanced)": "bot_ben.png",
-            "Aggressive Alex (Aggressive)": "bot_alex.png",
-            "Strategic Sarah (Balanced)": "bot_sarah.png",
-            "Tactical Tom (Aggressive)": "bot_tom.png",
-            "Master Mike (Aggressive)": "bot_mike.png",
-            "Grandmaster (Balanced)": "bot_grandmaster.png"
-        };
-
-        const filename = imageMap[name];
-        if (filename) {
-            return `/images/bots/${filename}`;
-        }
-        
-        // Fallback: Try to use the safe name if not in map
-        return `/images/bots/${encodeURIComponent(name)}.png`;
-    };
 
     return (
         <div className="w-full max-w-4xl mx-auto p-4">
@@ -105,7 +82,7 @@ const AiBotSelector: React.FC<AiBotSelectorProps> = ({ onSelect }) => {
                                 
                                 {/* Character Image */}
                                 <img 
-                                    src={getBotImage(model.name)} 
+                                    src={model.imageUrl} 
                                     alt={model.name}
                                     className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-110"
                                     onError={(e) => {
