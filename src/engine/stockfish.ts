@@ -6,7 +6,7 @@ type StockfishMessage = {
 export class StockfishEngine {
   private worker: Worker | null = null;
   private isReady: boolean = false;
-  private onBestMove: ((move: string) => void) | null = null;
+  private pendingMove: { resolve: (move: string) => void; reject: (reason?: any) => void } | null = null;
   private onEvaluation: ((score: number) => void) | null = null;
 
   constructor() {
@@ -35,9 +35,9 @@ export class StockfishEngine {
         if (message.startsWith('bestmove')) {
           const parts = message.split(' ');
           const move = parts[1];
-          if (this.onBestMove) {
-            this.onBestMove(move);
-            this.onBestMove = null; 
+          if (this.pendingMove) {
+            this.pendingMove.resolve(move);
+            this.pendingMove = null; 
           }
         }
         
@@ -97,11 +97,13 @@ export class StockfishEngine {
       }
 
       // Stop any previous search
+      if (this.pendingMove) {
+        this.pendingMove.reject('New search started');
+        this.pendingMove = null;
+      }
       this.worker.postMessage('stop'); 
 
-      this.onBestMove = (move) => {
-        resolve(move);
-      };
+      this.pendingMove = { resolve, reject };
 
       this.worker.postMessage(`position fen ${fen}`);
       this.worker.postMessage(`go depth ${depth}`);
