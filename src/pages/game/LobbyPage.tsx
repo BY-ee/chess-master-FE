@@ -98,7 +98,7 @@ const LobbyPage = () => {
         if (!roomName.trim()) return;
         setIsCreating(true);
         try {
-            const room = await gameApi.createRoom();
+            const room = await gameApi.createRoom(roomName);
             console.log('Room created:', room);
             setShowCreateModal(false);
             setRoomName('');

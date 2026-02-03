@@ -61,9 +61,9 @@ export const gameApi = {
     },
 
     // Room Management for Multiplayer
-    createRoom: async () => {
+    createRoom: async (roomName: string) => {
         try {
-            const response = await axios.post(`${API_URL}/games/rooms`, {}, {
+            const response = await axios.post(`${API_URL}/games/rooms`, { roomName }, {
                 headers: getAuthHeaders(),
             });
             return response.data; // Expected: { roomId: string, ... }
