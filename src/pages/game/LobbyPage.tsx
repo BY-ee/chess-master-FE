@@ -27,6 +27,10 @@ const LobbyPage = () => {
     const [isCreating, setIsCreating] = useState(false);
     const [isLoadingRooms, setIsLoadingRooms] = useState(false);
     
+    // Filtering & Pagination State
+    const [searchTerm, setSearchTerm] = useState('');
+    const [visibleCount, setVisibleCount] = useState(10);
+
     // Backend-driven active games list
     const [activeGames, setActiveGames] = useState<Room[]>([]);
 
@@ -77,6 +81,8 @@ const LobbyPage = () => {
         try {
             const roomList = await gameApi.getRooms();
             setRooms(roomList);
+            // Reset visible count on reload to ensure fresh start
+            setVisibleCount(10);
         } catch (error) {
             console.error('Failed to load rooms:', error);
         } finally {
@@ -142,6 +148,19 @@ const LobbyPage = () => {
         return `${Math.floor(diffHours / 24)}d ago`;
     };
 
+    // Derived state for filtering and pagination
+    const filteredRooms = rooms.filter(room => 
+        room.roomName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        room.hostUsername.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const displayedRooms = filteredRooms.slice(0, visibleCount);
+    const hasMore = visibleCount < filteredRooms.length;
+
+    const handleLoadMore = () => {
+        setVisibleCount(prev => prev + 10);
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900 text-white p-8">
             <div className="max-w-7xl mx-auto">
@@ -171,7 +190,6 @@ const LobbyPage = () => {
                                     Active Games ({activeGames.length})
                                 </h3>
                                 <p className="text-sm text-blue-200 mb-4">You have ongoing games.</p>
-                                
                                 <div className="space-y-2 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
                                     {activeGames.map(game => (
                                         <button 
@@ -243,22 +261,49 @@ const LobbyPage = () => {
 
                     {/* Right Column: Available Rooms */}
                     <div className="lg:col-span-2">
-                        <div className="bg-zinc-800/50 backdrop-blur-sm p-6 rounded-2xl shadow-2xl border border-zinc-700/50 h-full">
-                            <div className="flex items-center justify-between mb-5">
+                        <div className="bg-zinc-800/50 backdrop-blur-sm p-6 rounded-2xl shadow-2xl border border-zinc-700/50 h-full flex flex-col">
+                            
+                            <div className="flex flex-col md:flex-row md:items-center justify-between mb-5 gap-4">
                                 <h2 className="text-2xl font-semibold flex items-center gap-2">
                                     <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                                    Available Rooms
+                                    <span className="whitespace-nowrap">Available Rooms</span>
                                 </h2>
-                                <button
-                                    onClick={loadRooms}
-                                    disabled={isLoadingRooms || !isConnected}
-                                    className="px-4 py-2 bg-zinc-700/50 rounded-lg hover:bg-zinc-600/50 transition-colors disabled:opacity-50 text-sm"
-                                >
-                                    {isLoadingRooms ? 'Loading...' : 'Refresh'}
-                                </button>
+
+                                <div className="flex items-center gap-3 flex-1 w-full md:w-auto">
+                                    {/* Search Bar */}
+                                    <div className="relative flex-1">
+                                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            {/* Reuse Users icon or similar since we haven't imported Search yet. 
+                                                Wait, 'Plus', 'Users', 'Clock' are imported. Let's fix imports first. 
+                                                Wait, I can replace content. I will use 'Users' temporarily if Search is missing, 
+                                                BUT I should import Search properly in the imports section. 
+                                                I am replacing the whole block, I cannot easily change the top import here.
+                                                Actually, I can just use a text placeholder or SVG if needed, but better to just use standard input styles.
+                                            */}
+                                            <svg className="h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                            </svg>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            placeholder="Search rooms..."
+                                            className="w-full pl-10 pr-4 py-2 bg-zinc-700/50 border border-zinc-600/50 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all text-zinc-100 placeholder-zinc-500"
+                                        />
+                                    </div>
+                                    
+                                    <button
+                                        onClick={loadRooms}
+                                        disabled={isLoadingRooms || !isConnected}
+                                        className="px-4 py-2 bg-zinc-700/50 rounded-lg hover:bg-zinc-600/50 transition-colors disabled:opacity-50 text-sm whitespace-nowrap"
+                                    >
+                                        {isLoadingRooms ? 'Loading...' : 'Refresh'}
+                                    </button>
+                                </div>
                             </div>
 
-                            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                            <div className="space-y-3 flex-1 overflow-y-auto pr-2 custom-scrollbar min-h-[400px]">
                                 {!isConnected ? (
                                     <div className="text-center py-12 text-zinc-500">
                                         <Users className="w-16 h-16 mx-auto mb-4 opacity-30" />
@@ -273,47 +318,60 @@ const LobbyPage = () => {
                                             </div>
                                         ))}
                                     </div>
-                                ) : rooms.length === 0 ? (
+                                ) : displayedRooms.length === 0 ? (
                                     <div className="text-center py-12 text-zinc-500">
                                         <Users className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                                        <p className="mb-2">No available rooms</p>
-                                        <p className="text-sm">Create one to start playing!</p>
+                                        <p className="mb-2">
+                                            {searchTerm ? 'No rooms match your search' : 'No available rooms'}
+                                        </p>
+                                        {!searchTerm && <p className="text-sm">Create one to start playing!</p>}
                                     </div>
                                 ) : (
-                                    rooms.map((room) => (
-                                        <div
-                                            key={room.roomId}
-                                            className="bg-gradient-to-r from-zinc-700/40 to-zinc-600/40 backdrop-blur-sm rounded-xl p-4 hover:from-zinc-600/50 hover:to-zinc-500/50 transition-all duration-200 border border-zinc-600/30 group cursor-pointer"
-                                            onClick={() => handleJoinRoom(room.roomId)}
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex-1">
-                                                    <h3 className="font-semibold text-lg mb-1 group-hover:text-blue-400 transition-colors">
-                                                        {room.roomName}
-                                                    </h3>
-                                                    <div className="flex items-center gap-4 text-sm text-zinc-400">
-                                                        <span className="flex items-center gap-1">
-                                                            <Users className="w-4 h-4" />
-                                                            {room.hostUsername}
-                                                        </span>
-                                                        <span className="flex items-center gap-1">
-                                                            <Clock className="w-4 h-4" />
-                                                            {getRelativeTime(room.createdAt)}
-                                                        </span>
+                                    <>
+                                        {displayedRooms.map((room) => (
+                                            <div
+                                                key={room.roomId}
+                                                className="bg-gradient-to-r from-zinc-700/40 to-zinc-600/40 backdrop-blur-sm rounded-xl p-4 hover:from-zinc-600/50 hover:to-zinc-500/50 transition-all duration-200 border border-zinc-600/30 group cursor-pointer"
+                                                onClick={() => handleJoinRoom(room.roomId)}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex-1">
+                                                        <h3 className="font-semibold text-lg mb-1 group-hover:text-blue-400 transition-colors">
+                                                            {room.roomName}
+                                                        </h3>
+                                                        <div className="flex items-center gap-4 text-sm text-zinc-400">
+                                                            <span className="flex items-center gap-1">
+                                                                <Users className="w-4 h-4" />
+                                                                {room.hostUsername}
+                                                            </span>
+                                                            <span className="flex items-center gap-1">
+                                                                <Clock className="w-4 h-4" />
+                                                                {getRelativeTime(room.createdAt)}
+                                                            </span>
+                                                        </div>
                                                     </div>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleJoinRoom(room.roomId);
+                                                        }}
+                                                        className="px-5 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors font-medium text-sm"
+                                                    >
+                                                        Join
+                                                    </button>
                                                 </div>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleJoinRoom(room.roomId);
-                                                    }}
-                                                    className="px-5 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors font-medium text-sm"
-                                                >
-                                                    Join
-                                                </button>
                                             </div>
-                                        </div>
-                                    ))
+                                        ))}
+
+                                        {hasMore && (
+                                            <button 
+                                                onClick={handleLoadMore}
+                                                className="w-full py-3 mt-4 bg-zinc-700/30 hover:bg-zinc-700/50 text-zinc-400 hover:text-zinc-200 rounded-xl transition-all text-sm font-medium border border-dashed border-zinc-600/50"
+                                            >
+                                                Load More ({filteredRooms.length - displayedRooms.length} remaining)
+                                            </button>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -366,8 +424,6 @@ const LobbyPage = () => {
                     </div>
                 </div>
             )}
-
-
         </div>
     );
 };
