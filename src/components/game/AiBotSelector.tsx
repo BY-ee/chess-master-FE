@@ -86,7 +86,7 @@ const AiBotSelector: React.FC<AiBotSelectorProps> = ({ onSelect }) => {
                                     alt={model.name}
                                     className="absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-110"
                                     onError={(e) => {
-                                        e.currentTarget.style.opacity = '0'; // Hide image on error to show fallback
+                                        e.currentTarget.style.display = 'none'; // Hide image on error to show fallback
                                     }}
                                 />
                             </div>
