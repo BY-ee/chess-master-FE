@@ -149,9 +149,10 @@ const LobbyPage = () => {
     };
 
     // Derived state for filtering and pagination
-    const filteredRooms = rooms.filter(room => 
-        room.roomName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        room.hostUsername.toLowerCase().includes(searchTerm.toLowerCase())
+    const filteredRooms = (Array.isArray(rooms) ? rooms : []).filter(room => 
+        room &&
+        ((room.roomName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (room.hostUsername || '').toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
     const displayedRooms = filteredRooms.slice(0, visibleCount);
