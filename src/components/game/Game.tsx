@@ -39,6 +39,9 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
     
     // User Color State (Randomized on start for AI, determined by server for Online)
     const [userColor, setUserColor] = useState<'w' | 'b'>(() => Math.random() < 0.5 ? 'w' : 'b');
+    
+    // Room Verification State
+    const [isRoomVerified, setIsRoomVerified] = useState(mode !== 'online');
 
     // Socket
     const socket = useSocket();
@@ -121,6 +124,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
             // New Events for Synchronized Start
             socket.on('player_joined', (data: { username: string, currentPlayers: number }) => {
                 console.log('Player joined:', data);
+                setIsRoomVerified(true); // Valid room response
                 toast(`Player ${data.username} joined! (${data.currentPlayers}/2)`);
             });
 
@@ -134,6 +138,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
 
             socket.on('game_ready', (data: { whiteId: number; blackId: number }) => {
                 console.log('Game Ready!', data);
+                setIsRoomVerified(true); // Valid room response
                 setIsWaitingForOpponent(false);
                 toast.success('Game Started! Good luck.');
             });
@@ -221,6 +226,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
 
             socket.on('game_start', (data: { color: 'w' | 'b', fen?: string, pgn?: string }) => {
                 console.log('Game start!', data);
+                setIsRoomVerified(true); // Valid room response
                 setUserColor(data.color);
                 userColorRef.current = data.color;
                 
@@ -271,40 +277,48 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
             // Handle join errors or full room
             // Handle join errors or full room
             // Refactored to use Standard Codes as per Backend Update (2026-01-05)
+            // Define Error Interface for Type Safety
+            interface SocketError {
+                code: string;
+                message: string;
+            }
+
             socket.on('error', (error: any) => {
                 console.error('Socket error:', error);
                 
-                // Backend now sends { code, message } object
-                // Fallback for string errors just in case
-                const errCode = error.code || 'GENERIC_ERROR';
-                const errMsg = error.message || (typeof error === 'string' ? error : JSON.stringify(error));
+                // Normalize error to SocketError structure
+                const normalizedError: SocketError = {
+                    code: error?.code || 'GENERIC_ERROR',
+                    message: typeof error === 'string' ? error : (error?.message || JSON.stringify(error))
+                };
 
-                switch (errCode) {
+                const { code, message } = normalizedError;
+
+                // Handle Standard Error Codes
+                switch (code) {
+                    // Critical Room Errors -> Kick to Lobby
                     case 'ROOM_EXPIRED':
                     case 'ROOM_NOT_FOUND':
-                    case 'REMATCH_EXPIRED':
-                        toast.error(`Cannot start rematch: ${errMsg}`);
-                        setRematchRequested(false);
-                        setRematchIncoming(null);
-                        setIsRematchExpired(true);
+                        toast.error(`Room unavailable: ${message}`);
+                        setTimeout(() => {
+                             window.location.href = '/lobby';
+                        }, 1500);
                         break;
+                    
+                    // Rematch Errors
+                    case 'REMATCH_EXPIRED':
                     case 'NO_REMATCH_REQUEST':
                     case 'INVALID_ACTION':
-                        toast.error(`Action failed: ${errMsg}`);
-                        // Don't disable rematch, just reset request state
+                        toast.error(`Action failed: ${message}`);
+                        // Reset rematch UI state
                         setRematchRequested(false);
                         setRematchIncoming(null);
+                        if (code === 'REMATCH_EXPIRED') setIsRematchExpired(true);
                         break;
+
+                    // Fallback for unexpected errors
                     default:
-                        // Handle legacy string errors (Room expired, etc) for backward compatibility or unexpected errors
-                         if (errMsg.includes('expired') || errMsg.includes('not found') || errMsg.includes('valid for rematch')) {
-                             toast.error(`Cannot start rematch: ${errMsg}`);
-                             setRematchRequested(false);
-                             setRematchIncoming(null);
-                             setIsRematchExpired(true);
-                         } else {
-                             toast.error(`Game Error: ${errMsg}`);
-                         }
+                         toast.error(`Game Error: ${message}`);
                         break;
                 }
             });
@@ -613,18 +627,27 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 </div>
 
                 <div className="w-full aspect-square shadow-2xl rounded-lg overflow-hidden border-4 border-zinc-800 relative">
-                    <ChessboardComponent 
-                        position={displayFen} 
-                        onPieceDrop={onDrop}
-                        boardOrientation={userColor === 'w' ? 'white' : 'black'}
-                        customDarkSquareStyle={{ backgroundColor: '#769656' }}
-                        customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
-                        animationDuration={200}
-                        arePiecesDraggable={!isWaitingForOpponent && currentMoveIndex === history.length - 1 && game.turn() === userColor} // Only drag if active, latest, and user turn
-                    />
+                    {/* Pre-validation Loading for Online Mode */}
+                    {mode === 'online' && !isRoomVerified ? (
+                        <div className="absolute inset-0 z-50 bg-zinc-900 flex flex-col items-center justify-center text-white">
+                             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mb-4"></div>
+                             <h3 className="text-xl font-bold animate-pulse">Connecting to Room...</h3>
+                             <p className="text-zinc-500 text-sm mt-2">Verifying room status</p>
+                        </div>
+                    ) : (
+                        <ChessboardComponent 
+                            position={displayFen} 
+                            onPieceDrop={onDrop}
+                            boardOrientation={userColor === 'w' ? 'white' : 'black'}
+                            customDarkSquareStyle={{ backgroundColor: '#769656' }}
+                            customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
+                            animationDuration={200}
+                            arePiecesDraggable={!isWaitingForOpponent && currentMoveIndex === history.length - 1 && game.turn() === userColor}
+                        />
+                    )}
                     
-                    {/* Waiting For Opponent Overlay */}
-                    {isWaitingForOpponent && !gameStatus && (
+                    {/* Waiting For Opponent Overlay (Only show if Verified and Waiting) */}
+                    {isRoomVerified && isWaitingForOpponent && !gameStatus && (
                         <div className="absolute inset-0 z-40 bg-black/50 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-in fade-in duration-500">
                              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
                              <h3 className="text-xl font-bold">Waiting for opponent...</h3>

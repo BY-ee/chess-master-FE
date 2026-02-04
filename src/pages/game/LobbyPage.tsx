@@ -56,6 +56,20 @@ const LobbyPage = () => {
         socket.on('disconnect', handleDisconnect);
         socket.on('online_count', handleOnlineCount);
 
+        // Real-time Room Updates
+        socket.on('room_created', (newRoom: Room) => {
+            setRooms(prev => [newRoom, ...prev]);
+            // If I created this room (e.g. from another tab), add to my active games
+            if (user && newRoom.hostUsername === user.username) {
+                setActiveGames(prev => [newRoom, ...prev]);
+            }
+        });
+
+        socket.on('room_deleted', (data: { roomId: string }) => {
+            setRooms(prev => prev.filter(r => r.roomId !== data.roomId));
+            setActiveGames(prev => prev.filter(r => r.roomId !== data.roomId));
+        });
+
         if (socket.connected) {
             setIsConnected(true);
         }
@@ -64,8 +78,10 @@ const LobbyPage = () => {
             socket.off('connect', handleConnect);
             socket.off('disconnect', handleDisconnect);
             socket.off('online_count', handleOnlineCount);
+            socket.off('room_created');
+            socket.off('room_deleted');
         };
-    }, [socket]);
+    }, [socket, user]);
 
     // Load data when connected
     useEffect(() => {
@@ -79,8 +95,9 @@ const LobbyPage = () => {
         if (!isConnected) return;
         setIsLoadingRooms(true);
         try {
-            const roomList = await gameApi.getRooms();
-            setRooms(roomList);
+            const response = await gameApi.getRooms();
+            const roomList = Array.isArray(response) ? response : ((response as any)?.data || []);
+            setRooms(roomList as Room[]);
             // Reset visible count on reload to ensure fresh start
             setVisibleCount(10);
         } catch (error) {
