@@ -30,7 +30,8 @@ const LobbyPage = () => {
     
     // Filtering & Pagination State
     const [searchTerm, setSearchTerm] = useState('');
-    const [visibleCount, setVisibleCount] = useState(10);
+    const [nextCursor, setNextCursor] = useState<string | null>(null);
+    const [hasMore, setHasMore] = useState(false);
 
     // Backend-driven active games list
     const [activeGames, setActiveGames] = useState<Room[]>([]);
@@ -92,15 +93,42 @@ const LobbyPage = () => {
         }
     }, [isConnected]);
 
-    const loadRooms = async () => {
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (isConnected) loadRooms(false);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchTerm, isConnected]);
+
+    const loadRooms = async (isLoadMore = false) => {
         if (!isConnected) return;
+        
+        // Prevent dup calls
+        if (isLoadMore && (!nextCursor || isLoadingRooms)) return;
+
         setIsLoadingRooms(true);
         try {
-            const response = await gameApi.getRooms();
-            const roomList = Array.isArray(response) ? response : ((response as any)?.data || []);
-            setRooms(roomList as Room[]);
-            // Reset visible count on reload to ensure fresh start
-            setVisibleCount(10);
+            const currentCursor = isLoadMore ? nextCursor : undefined;
+            const response = await gameApi.getRooms({ 
+                cursor: currentCursor as string, 
+                limit: 10,
+                search: searchTerm 
+            });
+            
+            // Handle response structure { data: [], nextCursor: ... } or legacy []
+            const newRooms = Array.isArray(response) ? response : (response.data || []);
+            const newNextCursor = !Array.isArray(response) ? response.nextCursor : null;
+
+            if (isLoadMore) {
+                setRooms(prev => [...prev, ...newRooms]);
+            } else {
+                setRooms(newRooms);
+            }
+            
+            setNextCursor(newNextCursor);
+            setHasMore(!!newNextCursor);
+
         } catch (error) {
             console.error('Failed to load rooms:', error);
         } finally {
@@ -174,18 +202,11 @@ const LobbyPage = () => {
         return `${Math.floor(diffHours / 24)}d ago`;
     };
 
-    // Derived state for filtering and pagination
-    const filteredRooms = (Array.isArray(rooms) ? rooms : []).filter(room => 
-        room &&
-        ((room.roomName || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
-        (room.hostUsername || '').toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-
-    const displayedRooms = filteredRooms.slice(0, visibleCount);
-    const hasMore = visibleCount < filteredRooms.length;
+    // Derived state for filtering - REMOVED (Server-side handled)
+    const displayedRooms = rooms; // Direct use
 
     const handleLoadMore = () => {
-        setVisibleCount(prev => prev + 10);
+        loadRooms(true);
     };
 
     return (
@@ -321,11 +342,11 @@ const LobbyPage = () => {
                                     </div>
                                     
                                     <button
-                                        onClick={loadRooms}
+                                        onClick={() => loadRooms(false)}
                                         disabled={isLoadingRooms || !isConnected}
                                         className="px-4 py-2 bg-zinc-700/50 rounded-lg hover:bg-zinc-600/50 transition-colors disabled:opacity-50 text-sm whitespace-nowrap"
                                     >
-                                        {isLoadingRooms ? 'Loading...' : 'Refresh'}
+                                        Refresh
                                     </button>
                                 </div>
                             </div>
@@ -393,9 +414,10 @@ const LobbyPage = () => {
                                         {hasMore && (
                                             <button 
                                                 onClick={handleLoadMore}
-                                                className="w-full py-3 mt-4 bg-zinc-700/30 hover:bg-zinc-700/50 text-zinc-400 hover:text-zinc-200 rounded-xl transition-all text-sm font-medium border border-dashed border-zinc-600/50"
+                                                disabled={isLoadingRooms}
+                                                className="w-full py-3 mt-4 bg-zinc-700/30 hover:bg-zinc-700/50 text-zinc-400 hover:text-zinc-200 rounded-xl transition-all text-sm font-medium border border-dashed border-zinc-600/50 disabled:opacity-50"
                                             >
-                                                Load More ({filteredRooms.length - displayedRooms.length} remaining)
+                                                {isLoadingRooms ? 'Loading more...' : 'Load More'}
                                             </button>
                                         )}
                                     </>
