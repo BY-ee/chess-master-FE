@@ -24,6 +24,7 @@ const LobbyPage = () => {
     const [rooms, setRooms] = useState<Room[]>([]);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [roomName, setRoomName] = useState('');
+    const [createRoomError, setCreateRoomError] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
     const [isLoadingRooms, setIsLoadingRooms] = useState(false);
     
@@ -128,8 +129,16 @@ const LobbyPage = () => {
             // Navigate to game with room ID
             navigate(`/game/online?roomId=${room.roomId}`);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to create room:', error);
+            const status = error.response?.status;
+            const errCode = error.response?.data?.error; // Assuming standard backend error structure
+
+            if (status === 409 || errCode === 'ROOM_NAME_CONFLICT') {
+                setCreateRoomError('This room name is already taken.');
+            } else {
+                toast.error('Failed to create room. Please try again.');
+            }
         } finally {
             setIsCreating(false);
         }
@@ -412,12 +421,20 @@ const LobbyPage = () => {
                                 <input
                                     type="text"
                                     value={roomName}
-                                    onChange={(e) => setRoomName(e.target.value)}
+                                    onChange={(e) => {
+                                        setRoomName(e.target.value);
+                                        if (createRoomError) setCreateRoomError(null);
+                                    }}
                                     placeholder="Enter room name..."
-                                    className="w-full px-4 py-3 bg-zinc-700/50 border border-zinc-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                    className={`w-full px-4 py-3 bg-zinc-700/50 border ${createRoomError ? 'border-red-500 focus:ring-red-500' : 'border-zinc-600 focus:ring-blue-500'} rounded-lg focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
                                     autoFocus
                                     onKeyPress={(e) => e.key === 'Enter' && handleCreateRoom()}
                                 />
+                                {createRoomError && (
+                                    <p className="text-red-400 text-sm mt-2 animate-in slide-in-from-top-1 px-1">
+                                        {createRoomError}
+                                    </p>
+                                )}
                             </div>
                             <div className="flex gap-3 pt-2">
                                 <button
