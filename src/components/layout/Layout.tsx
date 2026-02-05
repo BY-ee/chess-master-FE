@@ -18,8 +18,9 @@ const Layout = () => {
                 >
                     <Menu size={24} />
                 </button>
-                <Link to="/lobby" className="font-bold text-lg text-zinc-200 hover:text-white transition-colors cursor-pointer">
-                    Chess Master
+                <Link to="/lobby" className="flex items-center gap-2 font-bold text-lg text-zinc-200 hover:text-white transition-colors cursor-pointer">
+                    <img src="/logo.png" alt="Chess Master" className="w-8 h-8 object-contain rounded-lg" />
+                    <span>Chess Master</span>
                 </Link>
             </header>
 

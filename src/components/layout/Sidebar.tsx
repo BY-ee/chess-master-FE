@@ -44,13 +44,16 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                 fixed top-0 left-0 h-full w-64 bg-zinc-900 border-r border-zinc-800 z-[60] transform transition-transform duration-300 ease-in-out shadow-2xl flex flex-col
                 ${isOpen ? 'translate-x-0' : '-translate-x-full'}
             `}>
-                <div className="flex-1 overflow-y-auto p-6 min-h-0 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-6 min-h-0 scrollbar-hide">
                     <div className="flex justify-between items-center mb-8">
                         <div 
                             onClick={() => handleNavigation('/lobby')}
-                            className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
+                            className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
                         >
-                            Chess Master
+                            <img src="/logo.png" alt="Chess Master" className="w-8 h-8 object-contain rounded-lg" />
+                            <span className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                                Chess Master
+                            </span>
                         </div>
                         <button 
                             onClick={onClose}
