@@ -27,7 +27,7 @@ export const useMatchmaking = () => {
     // Start matchmaking
     const startMatchmaking = useCallback(() => {
         if (!socket || !socket.connected) {
-            toast.error('Not connected to server');
+            toast.error('Not connected to server', { id: 'socket-disconnected' });
             return;
         }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import React from 'react';
+
 import { useParams, useSearchParams } from 'react-router-dom';
 import Game from '../../components/game/Game';
 import AiBotSelector from '../../components/game/AiBotSelector';
