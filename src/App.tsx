@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import LoginPage from './pages/auth/LoginPage';
 import SignupPage from './pages/auth/SignupPage';
 import LobbyPage from './pages/game/LobbyPage';
+import RoomListPage from './pages/game/RoomListPage';
 import GamePage from './pages/game/GamePage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -60,6 +61,7 @@ function App() {
           
           <Route element={<ProtectedRoute />}>
             <Route path="/lobby" element={<LobbyPage />} />
+            <Route path="/rooms" element={<RoomListPage />} />
             <Route path="/game/:mode" element={<GamePage />} />
           </Route>
 
