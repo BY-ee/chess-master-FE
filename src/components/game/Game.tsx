@@ -7,6 +7,7 @@ import { useSocket } from '../../hooks/useSocket';
 import { gameApi } from '../../api/gameApi';
 import { useAuthStore } from '../../store/useAuthStore';
 import toast from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 
 interface GameProps {
     mode: 'ai' | 'online';
@@ -45,6 +46,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
 
     // Socket
     const socket = useSocket();
+    const navigate = useNavigate();
 
     // Refs for keyboard handling to avoid stale closures
     const gameRef = useRef(game);
@@ -301,7 +303,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                     case 'ROOM_NOT_FOUND':
                         toast.error(`Room unavailable: ${message}`);
                         setTimeout(() => {
-                             window.location.href = '/lobby';
+                             navigate('/lobby');
                         }, 1500);
                         break;
                     
