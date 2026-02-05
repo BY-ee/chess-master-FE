@@ -52,7 +52,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             label: 'Game', 
             icon: Gamepad2,
             children: [
-                { label: 'vs User', icon: Users, path: '/rooms' },
+                { label: 'vs User', icon: Users, path: '/matchmaking' },
                 { label: 'vs AI', icon: Bot, path: '/game/ai' },
             ]
         },
