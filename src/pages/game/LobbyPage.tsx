@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useSocket } from '../../hooks/useSocket';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { gameApi } from '../../api/gameApi';
 import { Plus, Users, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -12,6 +12,41 @@ interface Room {
     hostUsername: string;
     createdAt: string;
 }
+
+// Optimized Room Item Component
+const RoomItem = React.memo(({ room, onJoin, getRelativeTime }: { room: Room; onJoin: (id: string) => void; getRelativeTime: (d: string) => string }) => (
+    <div
+        className="bg-zinc-800 hover:bg-zinc-700 rounded-xl p-4 transition-colors border border-zinc-700 hover:border-zinc-600 group cursor-pointer"
+        onClick={() => onJoin(room.roomId)}
+    >
+        <div className="flex items-center justify-between">
+            <div className="flex-1">
+                <h3 className="font-semibold text-lg mb-1 text-zinc-100 group-hover:text-blue-400 transition-colors">
+                    {room.roomName}
+                </h3>
+                <div className="flex items-center gap-4 text-sm text-zinc-400">
+                    <span className="flex items-center gap-1">
+                        <Users className="w-4 h-4" />
+                        {room.hostUsername}
+                    </span>
+                    <span className="flex items-center gap-1">
+                        <Clock className="w-4 h-4" />
+                        {getRelativeTime(room.createdAt)}
+                    </span>
+                </div>
+            </div>
+            <button
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onJoin(room.roomId);
+                }}
+                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors font-medium text-sm text-white"
+            >
+                Join
+            </button>
+        </div>
+    </div>
+));
 
 const LobbyPage = () => {
     const navigate = useNavigate();
@@ -121,7 +156,12 @@ const LobbyPage = () => {
             const newNextCursor = !Array.isArray(response) ? response.nextCursor : null;
 
             if (isLoadMore) {
-                setRooms(prev => [...prev, ...newRooms]);
+                // Filter out duplicates that might have been added via socket events or overlapping cursors
+                setRooms(prev => {
+                    const existingIds = new Set(prev.map(r => r.roomId));
+                    const uniqueNewRooms = newRooms.filter((r: Room) => !existingIds.has(r.roomId));
+                    return [...prev, ...uniqueNewRooms];
+                });
             } else {
                 setRooms(newRooms);
             }
@@ -189,7 +229,8 @@ const LobbyPage = () => {
         navigate('/login');
     };
 
-    const getRelativeTime = (dateString: string) => {
+    // Memoize helper to prevent re-creation
+    const getRelativeTime = useCallback((dateString: string) => {
         const now = new Date();
         const created = new Date(dateString);
         const diffMs = now.getTime() - created.getTime();
@@ -200,10 +241,10 @@ const LobbyPage = () => {
         const diffHours = Math.floor(diffMins / 60);
         if (diffHours < 24) return `${diffHours}h ago`;
         return `${Math.floor(diffHours / 24)}d ago`;
-    };
+    }, []);
 
-    // Derived state for filtering - REMOVED (Server-side handled)
-    const displayedRooms = rooms; // Direct use
+    // Derived state: Filter active games from available rooms to prevent duplicates
+    const displayedRooms = rooms.filter(room => !activeGames.find(ag => ag.roomId === room.roomId));
 
     const handleLoadMore = () => {
         loadRooms(true);
@@ -377,38 +418,12 @@ const LobbyPage = () => {
                                 ) : (
                                     <>
                                         {displayedRooms.map((room) => (
-                                            <div
-                                                key={room.roomId}
-                                                className="bg-gradient-to-r from-zinc-700/40 to-zinc-600/40 backdrop-blur-sm rounded-xl p-4 hover:from-zinc-600/50 hover:to-zinc-500/50 transition-all duration-200 border border-zinc-600/30 group cursor-pointer"
-                                                onClick={() => handleJoinRoom(room.roomId)}
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex-1">
-                                                        <h3 className="font-semibold text-lg mb-1 group-hover:text-blue-400 transition-colors">
-                                                            {room.roomName}
-                                                        </h3>
-                                                        <div className="flex items-center gap-4 text-sm text-zinc-400">
-                                                            <span className="flex items-center gap-1">
-                                                                <Users className="w-4 h-4" />
-                                                                {room.hostUsername}
-                                                            </span>
-                                                            <span className="flex items-center gap-1">
-                                                                <Clock className="w-4 h-4" />
-                                                                {getRelativeTime(room.createdAt)}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleJoinRoom(room.roomId);
-                                                        }}
-                                                        className="px-5 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors font-medium text-sm"
-                                                    >
-                                                        Join
-                                                    </button>
-                                                </div>
-                                            </div>
+                                            <RoomItem 
+                                                key={room.roomId} 
+                                                room={room} 
+                                                onJoin={handleJoinRoom} 
+                                                getRelativeTime={getRelativeTime} 
+                                            />
                                         ))}
 
                                         {hasMore && (
