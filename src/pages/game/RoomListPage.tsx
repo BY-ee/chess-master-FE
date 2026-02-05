@@ -268,18 +268,7 @@ const RoomListPage = () => {
                     </button>
                 </header>
                 
-                {/* Back Link */}
-                <div className="mb-6">
-                    <button 
-                        onClick={() => navigate('/lobby')}
-                        className="flex items-center gap-2 text-zinc-400 hover:text-white transition-colors group"
-                    >
-                        <svg className="w-5 h-5 group-hover:-translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                        </svg>
-                        Back to Lobby
-                    </button>
-                </div>
+
 
                 <div className="grid grid-cols-1 gap-6">
                     {/* Full Width Available Rooms */}
