@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { gameApi } from '../../api/gameApi';
 import { Plus, Users, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -57,7 +57,7 @@ const LobbyPage = () => {
         }
     };
 
-    const handleJoinRoom = async (roomId: string) => {
+    const handleJoinRoom = useCallback(async (roomId: string) => {
         try {
             await gameApi.joinRoom(roomId);
             navigate(`/game/online?roomId=${roomId}`);
@@ -67,7 +67,7 @@ const LobbyPage = () => {
             toast.error('Failed to join room. It may be full or no longer available.');
             loadRooms();
         }
-    };
+    }, [navigate, loadRooms]);
 
     const handleLogout = () => {
         logout();
