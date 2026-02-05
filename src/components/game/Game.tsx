@@ -829,7 +829,12 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                     {mode === 'online' && (
                         <div className="flex flex-col items-center gap-2 mt-2 w-full">
                             <button
-                                onClick={() => navigate('/matchmaking')}
+                                onClick={() => {
+                                    if (socket && roomId) {
+                                        socket.emit('leave_game', { roomId });
+                                    }
+                                    navigate('/matchmaking');
+                                }}
                                 className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-lg transition-transform hover:scale-105 shadow-lg flex items-center justify-center gap-2"
                             >
                                 <RefreshCw size={18} />
