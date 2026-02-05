@@ -1,0 +1,110 @@
+import { useNavigate, useLocation } from 'react-router-dom';
+import { X, Home, Gamepad2, LogOut, List } from 'lucide-react';
+import { useAuthStore } from '../../store/useAuthStore';
+
+interface SidebarProps {
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
+    const navigate = useNavigate();
+    const location = useLocation();
+    const logout = useAuthStore((state) => state.logout);
+    const user = useAuthStore((state) => state.user);
+
+    const handleNavigation = (path: string) => {
+        navigate(path);
+        onClose();
+    };
+
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+        onClose();
+    };
+
+    const menuItems = [
+        { label: 'Lobby', icon: Home, path: '/lobby' },
+        { label: 'Rooms', icon: List, path: '/rooms' },
+        { label: 'Play vs AI', icon: Gamepad2, path: '/game/ai' },
+    ];
+
+    return (
+        <>
+            {/* Overlay */}
+            {isOpen && (
+                <div 
+                    className="fixed inset-0 bg-black/50 z-[59] backdrop-blur-sm transition-opacity"
+                    onClick={onClose}
+                />
+            )}
+
+            {/* Sidebar */}
+            <div className={`
+                fixed top-0 left-0 h-full w-64 bg-zinc-900 border-r border-zinc-800 z-[60] transform transition-transform duration-300 ease-in-out shadow-2xl
+                ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+            `}>
+                <div className="p-6">
+                    <div className="flex justify-between items-center mb-8">
+                        <h2 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                            Chess Master
+                        </h2>
+                        <button 
+                            onClick={onClose}
+                            className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition-colors"
+                        >
+                            <X size={20} />
+                        </button>
+                    </div>
+
+                    {user && (
+                        <div className="flex items-center gap-3 p-3 mb-6 bg-zinc-800/50 rounded-xl border border-zinc-700/50">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">
+                                {user.username.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="overflow-hidden">
+                                <p className="text-sm font-medium text-white truncate">{user.username}</p>
+                                <p className="text-xs text-zinc-400">Online</p>
+                            </div>
+                        </div>
+                    )}
+
+                    <nav className="space-y-2">
+                        {menuItems.map((item) => {
+                            const isActive = location.pathname === item.path;
+                            return (
+                                <button
+                                    key={item.path}
+                                    onClick={() => handleNavigation(item.path)}
+                                    className={`
+                                        w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
+                                        ${isActive 
+                                            ? 'bg-blue-600/10 text-blue-400 border border-blue-600/20' 
+                                            : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                                        }
+                                    `}
+                                >
+                                    <item.icon size={18} />
+                                    {item.label}
+                                </button>
+                            );
+                        })}
+                    </nav>
+                </div>
+
+                <div className="absolute bottom-0 left-0 right-0 p-6 border-t border-zinc-800">
+                    <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
+                    >
+                        <LogOut size={18} />
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </>
+    );
+};
+
+export default Sidebar;

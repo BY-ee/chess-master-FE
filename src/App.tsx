@@ -5,6 +5,7 @@ import LobbyPage from './pages/game/LobbyPage';
 import RoomListPage from './pages/game/RoomListPage';
 import GamePage from './pages/game/GamePage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import Layout from './components/layout/Layout';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './store/useAuthStore';
 
@@ -60,9 +61,11 @@ function App() {
           <Route path="/signup" element={<SignupPage />} />
           
           <Route element={<ProtectedRoute />}>
-            <Route path="/lobby" element={<LobbyPage />} />
-            <Route path="/rooms" element={<RoomListPage />} />
-            <Route path="/game/:mode" element={<GamePage />} />
+            <Route element={<Layout />}>
+              <Route path="/lobby" element={<LobbyPage />} />
+              <Route path="/rooms" element={<RoomListPage />} />
+              <Route path="/game/:mode" element={<GamePage />} />
+            </Route>
           </Route>
 
           <Route path="/" element={<Navigate to={token ? "/lobby" : "/login"} replace />} />
