@@ -261,11 +261,8 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                     if (opp) setOpponent(opp);
                 }
                 
-                // Only stop waiting immediately if we are restoring an ACTIVE game (has history)
-                // Otherwise (fresh game), we keep waiting until 'game_ready' which confirms both players are in
-                if (data.fen || data.pgn) {
-                    setIsWaitingForOpponent(false);
-                }
+                // Always stop waiting when game starts
+                setIsWaitingForOpponent(false);
                 
                 if (data.fen || data.pgn) {
                     console.log('Restoring game state from server...');
@@ -349,7 +346,9 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
 
                     // Fallback for unexpected errors
                     default:
-                         toast.error(`Game Error: ${message}`);
+                        // Ignore minor sync errors if game proceeds, but alert user
+                         // toast.error(`Game Error: ${message}`);
+                         console.warn('Game Error:', message);
                         break;
                 }
             });
@@ -368,8 +367,9 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 socket.off('error');
                 
                 // Notify server that we are leaving the room
+                // Crucial for resetting matchmaking state if user navigates away abruptly
                 console.log(`Leaving game room: ${roomId}`);
-                // socket.emit('leave_game', { roomId }); // Removed: Treating navigation as temporary disconnect, not resignation.
+                socket.emit('leave_game', { roomId }); 
             };
         }
     }, [mode, socket, roomId]);
@@ -574,6 +574,26 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
         }
     };
 
+    // Resign / Draw Handlers
+    const handleResign = () => {
+        if (mode === 'online' && socket && roomId) {
+            if (confirm("Are you sure you want to resign?")) {
+                socket.emit('resign_game', { roomId });
+            }
+        }
+    };
+
+    const handleOfferDraw = () => {
+         if (mode === 'online' && socket && roomId) {
+             socket.emit('offer_draw', { roomId });
+             toast.success('Draw offered sent');
+         }
+    };
+
+
+
+    // ... (existing navigateHistory / jumpToMove) ...
+
     const navigateHistory = (direction: 'back' | 'forward') => {
         if (direction === 'back') {
             setCurrentMoveIndex(Math.max(0, currentMoveIndex - 1));
@@ -602,6 +622,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
         }
         return pairs;
     };
+
 
     // Get current generic FEN for display
     // We use the FEN from history based on the current index
@@ -794,6 +815,24 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                     Playing as: {userColor === 'w' ? 'White' : 'Black'} <br/>
                     Mode: {mode}
                 </div>
+
+                {/* Resign / Draw Controls for Online Mode */}
+                {mode === 'online' && !gameStatus && (
+                    <div className="p-3 border-t border-white/10 flex gap-2">
+                        <button 
+                            onClick={handleOfferDraw}
+                            className="flex-1 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 text-xs font-semibold text-zinc-300 transition-colors"
+                        >
+                            Offer Draw
+                        </button>
+                        <button 
+                            onClick={handleResign}
+                            className="flex-1 py-2 rounded-lg bg-red-900/50 hover:bg-red-800/50 text-xs font-semibold text-red-400 transition-colors"
+                        >
+                            Resign
+                        </button>
+                    </div>
+                )}
             </div>
             
             {/* Floating Game Over Modal */}
