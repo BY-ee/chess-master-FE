@@ -1,10 +1,18 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { X, Home, Gamepad2, LogOut, List } from 'lucide-react';
+import { X, Home, Gamepad2, LogOut, List, ChevronDown, ChevronRight, type LucideIcon, Bot, Users } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
+import { useState } from 'react';
 
 interface SidebarProps {
     isOpen: boolean;
     onClose: () => void;
+}
+
+interface MenuItem {
+    label: string;
+    icon?: LucideIcon;
+    path?: string;
+    children?: MenuItem[];
 }
 
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
@@ -12,6 +20,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     const location = useLocation();
     const logout = useAuthStore((state) => state.logout);
     const user = useAuthStore((state) => state.user);
+    const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
 
     const handleNavigation = (path: string) => {
         navigate(path);
@@ -24,11 +33,75 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         onClose();
     };
 
-    const menuItems = [
+    const toggleMenu = (label: string) => {
+        setExpandedMenus(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(label)) {
+                newSet.delete(label);
+            } else {
+                newSet.add(label);
+            }
+            return newSet;
+        });
+    };
+
+    const menuItems: MenuItem[] = [
         { label: 'Lobby', icon: Home, path: '/lobby' },
         { label: 'Rooms', icon: List, path: '/rooms' },
-        { label: 'Play vs AI', icon: Gamepad2, path: '/game/ai' },
+        { 
+            label: 'Game', 
+            icon: Gamepad2,
+            children: [
+                { label: 'vs User', icon: Users, path: '/rooms' },
+                { label: 'vs AI', icon: Bot, path: '/game/ai' },
+            ]
+        },
     ];
+
+    // Recursive menu item renderer
+    const renderMenuItem = (item: MenuItem, depth = 0) => {
+        const hasChildren = item.children && item.children.length > 0;
+        const isExpanded = expandedMenus.has(item.label);
+        const isActive = item.path && location.pathname === item.path;
+        const paddingLeft = depth * 12 + 16; // 16px base + 12px per depth level
+
+        return (
+            <div key={item.label}>
+                <button
+                    onClick={() => {
+                        if (hasChildren) {
+                            toggleMenu(item.label);
+                        } else if (item.path) {
+                            handleNavigation(item.path);
+                        }
+                    }}
+                    className={`
+                        w-full flex items-center gap-3 py-3 rounded-xl text-sm font-medium transition-all
+                        ${isActive 
+                            ? 'bg-blue-600/10 text-blue-400 border border-blue-600/20' 
+                            : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                        }
+                    `}
+                    style={{ paddingLeft: `${paddingLeft}px`, paddingRight: '16px' }}
+                >
+                    {item.icon && <item.icon size={18} className="flex-shrink-0" />}
+                    <span className="flex-1 text-left">{item.label}</span>
+                    {hasChildren && (
+                        isExpanded ? 
+                            <ChevronDown size={16} className="flex-shrink-0" /> : 
+                            <ChevronRight size={16} className="flex-shrink-0" />
+                    )}
+                </button>
+                
+                {/* Submenu */}
+                {hasChildren && isExpanded && (
+                    <div className="mt-1 space-y-1">
+                        {item.children!.map(child => renderMenuItem(child, depth + 1))}
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     return (
         <>
@@ -76,25 +149,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                     )}
 
                     <nav className="space-y-2">
-                        {menuItems.map((item) => {
-                            const isActive = location.pathname === item.path;
-                            return (
-                                <button
-                                    key={item.path}
-                                    onClick={() => handleNavigation(item.path)}
-                                    className={`
-                                        w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all
-                                        ${isActive 
-                                            ? 'bg-blue-600/10 text-blue-400 border border-blue-600/20' 
-                                            : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                                        }
-                                    `}
-                                >
-                                    <item.icon size={18} className="flex-shrink-0" />
-                                    {item.label}
-                                </button>
-                            );
-                        })}
+                        {menuItems.map(item => renderMenuItem(item))}
                     </nav>
                 </div>
 
