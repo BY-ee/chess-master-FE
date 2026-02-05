@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import React from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import Game from '../../components/game/Game';
 import AiBotSelector from '../../components/game/AiBotSelector';
 import { ArrowLeft } from 'lucide-react';
 
 const GamePage = () => {
     const { mode } = useParams<{ mode: string }>();
-    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const roomId = searchParams.get('roomId') || undefined;
 
@@ -16,12 +15,7 @@ const GamePage = () => {
             <header className="p-4 border-b border-zinc-800">
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
                     <h1 className="font-bold text-xl">Chess Master - {mode === 'online' ? 'Online Match' : 'vs AI'}</h1>
-                    <button 
-                        onClick={() => navigate('/lobby')}
-                        className="px-3 py-1 bg-zinc-800 rounded text-sm hover:bg-zinc-700 transition-colors"
-                    >
-                        Exit Game
-                    </button>
+
                 </div>
             </header>
             

@@ -29,6 +29,15 @@
     background: rgba(161, 161, 170, 0.7);
 }
 
+/* Scrollbar Hide Utility */
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+.scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
 /* Animations */
 @keyframes zoom-in {
     from {

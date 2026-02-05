@@ -61,9 +61,9 @@ export const gameApi = {
     },
 
     // Room Management for Multiplayer
-    createRoom: async () => {
+    createRoom: async (roomName: string) => {
         try {
-            const response = await axios.post(`${API_URL}/games/rooms`, {}, {
+            const response = await axios.post(`${API_URL}/games/rooms`, { roomName }, {
                 headers: getAuthHeaders(),
             });
             return response.data; // Expected: { roomId: string, ... }
@@ -85,12 +85,13 @@ export const gameApi = {
         }
     },
 
-    getRooms: async () => {
+    getRooms: async (params?: { cursor?: string; limit?: number; search?: string }) => {
         try {
             const response = await axios.get(`${API_URL}/games/rooms`, {
                 headers: getAuthHeaders(),
+                params,
             });
-            return response.data; // Expected: Room[]
+            return response.data; // Expected: { data: Room[], nextCursor: string | null }
         } catch (error) {
             console.error('Failed to fetch rooms:', error);
             throw error;
