@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMatchmaking } from '../../hooks/useMatchmaking';
 import { ArrowLeft, Users, Clock } from 'lucide-react';
@@ -16,16 +16,37 @@ const MatchmakingPage = () => {
         isConnected
     } = useMatchmaking();
 
-    // Auto-start matchmaking when connected
+    const [connectionTimeout, setConnectionTimeout] = useState(false);
+
+    // Auto-start matchmaking when connected, handle timeout
     useEffect(() => {
+        let timer: ReturnType<typeof setTimeout>;
+
         if (isConnected) {
+            setConnectionTimeout(false);
             startMatchmaking();
+        } else {
+            // Wait 5 seconds for connection
+            timer = setTimeout(() => {
+                setConnectionTimeout(true);
+            }, 5000);
         }
+
+        return () => {
+            if (timer) clearTimeout(timer);
+        };
     }, [isConnected, startMatchmaking]);
 
     const handleCancel = () => {
         cancelMatchmaking();
         navigate('/lobby');
+    };
+
+    const handleRetryConnection = () => {
+        setConnectionTimeout(false);
+        // Socket auto-reconnects, but we reset UI state
+        // If needed, we could force socket.connect() here via hook
+        window.location.reload(); // Simple retry for now
     };
 
     const formatTime = (seconds: number): string => {
@@ -45,7 +66,18 @@ const MatchmakingPage = () => {
                     <div className="relative z-10">
                         {/* Status Icon */}
                         <div className="flex justify-center mb-6">
-                            {isSearching ? (
+                            {!isConnected ? (
+                                connectionTimeout ? (
+                                    <div className="w-24 h-24 rounded-full bg-red-600/20 border-4 border-red-500 flex items-center justify-center">
+                                        <Users className="w-12 h-12 text-red-500" />
+                                    </div>
+                                ) : (
+                                    <div className="relative w-24 h-24 rounded-full bg-zinc-700/50 border-4 border-zinc-600 flex items-center justify-center">
+                                        <div className="absolute inset-0 rounded-full border-t-4 border-blue-500 animate-spin"></div>
+                                        <Users className="w-10 h-10 text-zinc-400" />
+                                    </div>
+                                )
+                            ) : isSearching ? (
                                 <div className="relative">
                                     {/* Pulsing Rings */}
                                     <div className="absolute inset-0 rounded-full bg-blue-500/20 animate-ping"></div>
@@ -70,22 +102,27 @@ const MatchmakingPage = () => {
                         {/* Status Text */}
                         <div className="text-center mb-8">
                             <h1 className="text-3xl font-bold mb-2">
-                                {isSearching && (
+                                {!isConnected ? (
+                                    connectionTimeout ? 'Connection Failed' : 'Connecting...'
+                                ) : isSearching ? (
                                     <>
                                         Finding Opponent
                                         <span className="inline-block animate-pulse">.</span>
                                         <span className="inline-block animate-pulse" style={{ animationDelay: '0.2s' }}>.</span>
                                         <span className="inline-block animate-pulse" style={{ animationDelay: '0.4s' }}>.</span>
                                     </>
-                                )}
-                                {status === 'timeout' && 'No Match Found'}
-                                {status === 'error' && 'Connection Error'}
+                                ) : status === 'timeout' ? 'No Match Found'
+                                  : status === 'error' ? 'Connection Error'
+                                  : ''}
                             </h1>
                             
                             <p className="text-zinc-400">
-                                {isSearching && 'Searching for a player at your level'}
-                                {status === 'timeout' && 'No opponents available right now'}
-                                {status === 'error' && 'Lost connection to matchmaking server'}
+                                {!isConnected ? (
+                                    connectionTimeout ? 'Could not connect to the game server' : 'Establishing connection to server...'
+                                ) : isSearching ? 'Searching for a player at your level'
+                                  : status === 'timeout' ? 'No opponents available right now'
+                                  : status === 'error' ? 'Lost connection to matchmaking server'
+                                  : ''}
                             </p>
                         </div>
 
@@ -127,7 +164,25 @@ const MatchmakingPage = () => {
 
                         {/* Action Buttons */}
                         <div className="space-y-3">
-                            {isSearching ? (
+                            {!isConnected ? (
+                                <>
+                                    {connectionTimeout && (
+                                        <button
+                                            onClick={handleRetryConnection}
+                                            className="w-full py-3 bg-blue-600 hover:bg-blue-500 rounded-xl font-semibold transition-all duration-200 shadow-lg"
+                                        >
+                                            Retry Connection
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => navigate('/lobby')}
+                                        className="w-full py-3 bg-zinc-700 hover:bg-zinc-600 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2"
+                                    >
+                                        <ArrowLeft className="w-5 h-5" />
+                                        Back to Lobby
+                                    </button>
+                                </>
+                            ) : isSearching ? (
                                 <button
                                     onClick={handleCancel}
                                     className="w-full py-3 bg-red-600 hover:bg-red-500 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 shadow-lg hover:shadow-red-500/20"
