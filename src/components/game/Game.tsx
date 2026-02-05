@@ -43,6 +43,9 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
     
     // Room Verification State
     const [isRoomVerified, setIsRoomVerified] = useState(mode !== 'online');
+    
+    // Opponent Info State
+    const [opponent, setOpponent] = useState<{ username: string; rating?: number } | null>(null);
 
     // Socket
     const socket = useSocket();
@@ -128,6 +131,12 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 console.log('Player joined:', data);
                 setIsRoomVerified(true); // Valid room response
                 toast(`Player ${data.username} joined! (${data.currentPlayers}/2)`);
+                
+                // If it's not us (assuming we know our name, or simplistically just set it as opponent if we are waiting)
+                // Better: Check against current user
+                 if (user && data.username !== user.username) {
+                     setOpponent({ username: data.username });
+                 }
             });
 
             socket.on('player_left', (data: { username: string, currentPlayers: number }) => {
@@ -135,6 +144,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 toast.error(`Player ${data.username} left the game.`);
                 if (data.currentPlayers < 2) {
                     setIsWaitingForOpponent(true);
+                    setOpponent(null); // Clear opponent info
                 }
             });
 
@@ -226,11 +236,30 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 rematchIncomingRef.current = null;
             });
 
-            socket.on('game_start', (data: { color: 'w' | 'b', fen?: string, pgn?: string }) => {
+            socket.on('game_start', (data: { 
+                color: 'w' | 'b', 
+                fen?: string, 
+                pgn?: string,
+                players?: {
+                    white: { username: string, rating?: number },
+                    black: { username: string, rating?: number }
+                },
+                opponent?: { username: string, rating?: number } // Direct opponent info support
+            }) => {
                 console.log('Game start!', data);
                 setIsRoomVerified(true); // Valid room response
                 setUserColor(data.color);
                 userColorRef.current = data.color;
+                
+                // Handle opponent info
+                if (data.opponent) {
+                    setOpponent(data.opponent);
+                } else if (data.players) {
+                    // Deduce opponent from players
+                    const isWhite = data.color === 'w';
+                    const opp = isWhite ? data.players.black : data.players.white;
+                    if (opp) setOpponent(opp);
+                }
                 
                 // Only stop waiting immediately if we are restoring an ACTIVE game (has history)
                 // Otherwise (fresh game), we keep waiting until 'game_ready' which confirms both players are in
@@ -617,6 +646,35 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                                 </div>
                             </div>
                         )}
+
+                        {mode === 'online' && (
+                            <div className="flex items-center gap-3 mt-1">
+                                <div className="w-8 h-8 rounded-full bg-indigo-900/50 overflow-hidden relative border border-indigo-500/30 flex items-center justify-center">
+                                     {opponent ? (
+                                        <span className="text-xs font-bold text-indigo-200">
+                                            {opponent.username.substring(0, 2).toUpperCase()}
+                                        </span>
+                                     ) : (
+                                         <div className="w-full h-full bg-zinc-700 animate-pulse" />
+                                     )}
+                                </div>
+                                <div className="text-xs text-zinc-400 flex items-center gap-2">
+                                    <span className="font-medium text-zinc-300">
+                                        {opponent ? `Vs: ${opponent.username}` : 'Waiting for opponent...'}
+                                    </span>
+                                    {opponent?.rating && (
+                                        <span className="bg-zinc-700 px-1.5 py-0.5 rounded text-zinc-300 font-mono">
+                                            {opponent.rating}
+                                        </span>
+                                    )}
+                                    {opponent && (
+                                        <span className="text-[10px] uppercase border border-indigo-500/30 text-indigo-400 px-1 rounded">
+                                            Online
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <button 
@@ -769,12 +827,21 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                             : 'Play Again'}
                     </button>
                     {mode === 'online' && (
-                        <button 
-                             onClick={() => setGameStatus('')} // Just close the modal to view board
-                             className="text-zinc-400 hover:text-white text-sm mt-3 underline"
-                        >
-                            Close Menu (View Board)
-                        </button>
+                        <div className="flex flex-col items-center gap-2 mt-2 w-full">
+                            <button
+                                onClick={() => navigate('/matchmaking')}
+                                className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-bold text-lg transition-transform hover:scale-105 shadow-lg flex items-center justify-center gap-2"
+                            >
+                                <RefreshCw size={18} />
+                                Find New Opponent
+                            </button>
+                            <button 
+                                 onClick={() => setGameStatus('')} // Just close the modal to view board
+                                 className="text-zinc-400 hover:text-white text-sm mt-1 underline"
+                            >
+                                Close Menu (View Board)
+                            </button>
+                        </div>
                     )}
                 </div>
             )}
