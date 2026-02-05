@@ -1,190 +1,34 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/useAuthStore';
-import { useSocket } from '../../hooks/useSocket';
-import React, { useEffect, useState, useCallback } from 'react';
+import { useState } from 'react';
 import { gameApi } from '../../api/gameApi';
-import { Users, Clock } from 'lucide-react';
+import { Users } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-interface Room {
-    roomId: string;
-    roomName: string;
-    hostUsername: string;
-    createdAt: string;
-}
-
-// Optimized Room Item Component
-const RoomItem = React.memo(({ room, onJoin, getRelativeTime }: { room: Room; onJoin: (id: string) => void; getRelativeTime: (d: string) => string }) => (
-    <div
-        className="bg-zinc-800 hover:bg-zinc-700 rounded-xl p-4 transition-colors border border-zinc-700 hover:border-zinc-600 group cursor-pointer"
-        onClick={() => onJoin(room.roomId)}
-    >
-        <div className="flex items-center justify-between">
-            <div className="flex-1">
-                <h3 className="font-semibold text-lg mb-1 text-zinc-100 group-hover:text-blue-400 transition-colors">
-                    {room.roomName}
-                </h3>
-                <div className="flex items-center gap-4 text-sm text-zinc-400">
-                    <span className="flex items-center gap-1">
-                        <Users className="w-4 h-4" />
-                        {room.hostUsername}
-                    </span>
-                    <span className="flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {getRelativeTime(room.createdAt)}
-                    </span>
-                </div>
-            </div>
-            <button
-                onClick={(e) => {
-                    e.stopPropagation();
-                    onJoin(room.roomId);
-                }}
-                className="px-5 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors font-medium text-sm text-white"
-            >
-                Join
-            </button>
-        </div>
-    </div>
-));
+import { useRooms } from '../../hooks/useRooms';
+import { RoomItem } from '../../components/game/RoomItem';
 
 const RoomListPage = () => {
     const navigate = useNavigate();
     const logout = useAuthStore((state) => state.logout);
     const user = useAuthStore((state) => state.user);
-    const socket = useSocket();
     
-    const [isConnected, setIsConnected] = useState(false);
-
-    const [rooms, setRooms] = useState<Room[]>([]);
+    // Use custom hook for room management (without online count)
+    const {
+        isConnected,
+        rooms,
+        activeGames,
+        isLoadingRooms,
+        searchTerm,
+        hasMore,
+        setSearchTerm,
+        loadRooms,
+        getRelativeTime,
+    } = useRooms({ enableOnlineCount: false });
+    
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [roomName, setRoomName] = useState('');
     const [createRoomError, setCreateRoomError] = useState<string | null>(null);
     const [isCreating, setIsCreating] = useState(false);
-    const [isLoadingRooms, setIsLoadingRooms] = useState(false);
-    
-    // Filtering & Pagination State
-    const [searchTerm, setSearchTerm] = useState('');
-    const [nextCursor, setNextCursor] = useState<string | null>(null);
-    const [hasMore, setHasMore] = useState(false);
-
-    // Backend-driven active games list
-    const [activeGames, setActiveGames] = useState<Room[]>([]);
-
-
-    useEffect(() => {
-        if (!socket) return;
-
-        const handleConnect = () => {
-            setIsConnected(true);
-            console.log('Socket connected to lobby');
-        };
-
-        const handleDisconnect = () => {
-            setIsConnected(false);
-            console.log('Socket disconnected from lobby');
-        };
-
-        const handleOnlineCount = (_count: number) => {
-            // setOnlinePlayers(count); // Removed from this view
-        };
-
-        socket.on('connect', handleConnect);
-        socket.on('disconnect', handleDisconnect);
-        socket.on('online_count', handleOnlineCount);
-
-        // Real-time Room Updates
-        socket.on('room_created', (newRoom: Room) => {
-            setRooms(prev => [newRoom, ...prev]);
-            // If I created this room (e.g. from another tab), add to my active games
-            if (user && newRoom.hostUsername === user.username) {
-                setActiveGames(prev => [newRoom, ...prev]);
-            }
-        });
-
-        socket.on('room_deleted', (data: { roomId: string }) => {
-            setRooms(prev => prev.filter(r => r.roomId !== data.roomId));
-            setActiveGames(prev => prev.filter(r => r.roomId !== data.roomId));
-        });
-
-        if (socket.connected) {
-            setIsConnected(true);
-        }
-
-        return () => {
-            socket.off('connect', handleConnect);
-            socket.off('disconnect', handleDisconnect);
-            socket.off('online_count', handleOnlineCount);
-            socket.off('room_created');
-            socket.off('room_deleted');
-        };
-    }, [socket, user]);
-
-    // Load data when connected
-    useEffect(() => {
-        if (isConnected) {
-            loadRooms();
-            loadActiveGames();
-        }
-    }, [isConnected]);
-
-    // Debounce search
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            if (isConnected) loadRooms(false);
-        }, 500);
-        return () => clearTimeout(timer);
-    }, [searchTerm, isConnected]);
-
-    const loadRooms = async (isLoadMore = false) => {
-        if (!isConnected) return;
-        
-        // Prevent dup calls
-        if (isLoadMore && (!nextCursor || isLoadingRooms)) return;
-
-        setIsLoadingRooms(true);
-        try {
-            const currentCursor = isLoadMore ? nextCursor : undefined;
-            const response = await gameApi.getRooms({ 
-                cursor: currentCursor as string, 
-                limit: 10,
-                search: searchTerm 
-            });
-            
-            // Handle response structure { data: [], nextCursor: ... } or legacy []
-            const newRooms = Array.isArray(response) ? response : (response.data || []);
-            const newNextCursor = !Array.isArray(response) ? response.nextCursor : null;
-
-            if (isLoadMore) {
-                // Filter out duplicates that might have been added via socket events or overlapping cursors
-                setRooms(prev => {
-                    const existingIds = new Set(prev.map(r => r.roomId));
-                    const uniqueNewRooms = newRooms.filter((r: Room) => !existingIds.has(r.roomId));
-                    return [...prev, ...uniqueNewRooms];
-                });
-            } else {
-                setRooms(newRooms);
-            }
-            
-            setNextCursor(newNextCursor);
-            setHasMore(!!newNextCursor);
-
-        } catch (error) {
-            console.error('Failed to load rooms:', error);
-        } finally {
-            setIsLoadingRooms(false);
-        }
-    };
-
-    const loadActiveGames = async () => {
-        if (!isConnected) return;
-        try {
-            const games = await gameApi.getActiveGames();
-            setActiveGames(games);
-        } catch (error) {
-            console.error('Failed to load active games:', error);
-        }
-    };
 
     const handleCreateRoom = async () => {
         if (!roomName.trim()) return;
@@ -228,20 +72,6 @@ const RoomListPage = () => {
         logout();
         navigate('/login');
     };
-
-    // Memoize helper to prevent re-creation
-    const getRelativeTime = useCallback((dateString: string) => {
-        const now = new Date();
-        const created = new Date(dateString);
-        const diffMs = now.getTime() - created.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        
-        if (diffMins < 1) return 'Just now';
-        if (diffMins < 60) return `${diffMins}m ago`;
-        const diffHours = Math.floor(diffMins / 60);
-        if (diffHours < 24) return `${diffHours}h ago`;
-        return `${Math.floor(diffHours / 24)}d ago`;
-    }, []);
 
     const handleLoadMore = () => {
         loadRooms(true);
