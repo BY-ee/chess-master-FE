@@ -21,6 +21,25 @@ export const useMatchmaking = () => {
         elapsedTime: 0,
     });
     
+    const [isConnected, setIsConnected] = useState(false);
+
+    useEffect(() => {
+        if (!socket) return;
+        
+        setIsConnected(socket.connected);
+
+        const onConnect = () => setIsConnected(true);
+        const onDisconnect = () => setIsConnected(false);
+        
+        socket.on('connect', onConnect);
+        socket.on('disconnect', onDisconnect);
+        
+        return () => {
+            socket.off('connect', onConnect);
+            socket.off('disconnect', onDisconnect);
+        };
+    }, [socket]);
+    
     const timerRef = useRef<number | null>(null);
     const isSearchingRef = useRef(false);
 
@@ -180,5 +199,6 @@ export const useMatchmaking = () => {
         isSearching: state.status === 'searching',
         startMatchmaking,
         cancelMatchmaking,
+        isConnected,
     };
 };

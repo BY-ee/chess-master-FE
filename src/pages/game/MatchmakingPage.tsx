@@ -12,13 +12,16 @@ const MatchmakingPage = () => {
         estimatedWait,
         isSearching,
         startMatchmaking, 
-        cancelMatchmaking 
+        cancelMatchmaking,
+        isConnected
     } = useMatchmaking();
 
-    // Auto-start matchmaking on mount
+    // Auto-start matchmaking when connected
     useEffect(() => {
-        startMatchmaking();
-    }, [startMatchmaking]);
+        if (isConnected) {
+            startMatchmaking();
+        }
+    }, [isConnected, startMatchmaking]);
 
     const handleCancel = () => {
         cancelMatchmaking();
