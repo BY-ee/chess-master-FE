@@ -130,6 +130,13 @@ const LobbyPage = () => {
                             </h2>
                             <div className="space-y-3">
                                 <button 
+                                    onClick={() => navigate('/matchmaking')}
+                                    className="w-full p-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 rounded-xl text-left transition-all duration-200 flex items-center justify-between group shadow-lg"
+                                >
+                                    <span className="font-medium">Play vs User</span>
+                                    <span className="text-blue-200 text-sm group-hover:text-white transition-colors">Matchmaking</span>
+                                </button>
+                                <button 
                                     onClick={() => navigate('/game/ai')}
                                     className="w-full p-4 bg-gradient-to-r from-zinc-700 to-zinc-600 hover:from-zinc-600 hover:to-zinc-500 rounded-xl text-left transition-all duration-200 flex items-center justify-between group shadow-lg"
                                 >

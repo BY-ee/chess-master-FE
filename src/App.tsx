@@ -3,6 +3,7 @@ import LoginPage from './pages/auth/LoginPage';
 import SignupPage from './pages/auth/SignupPage';
 import LobbyPage from './pages/game/LobbyPage';
 import RoomListPage from './pages/game/RoomListPage';
+import MatchmakingPage from './pages/game/MatchmakingPage';
 import GamePage from './pages/game/GamePage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import Layout from './components/layout/Layout';
@@ -64,6 +65,7 @@ function App() {
             <Route element={<Layout />}>
               <Route path="/lobby" element={<LobbyPage />} />
               <Route path="/rooms" element={<RoomListPage />} />
+              <Route path="/matchmaking" element={<MatchmakingPage />} />
               <Route path="/game/:mode" element={<GamePage />} />
             </Route>
           </Route>
