@@ -24,6 +24,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [gameStatus, setGameStatus] = useState<string>('');
     const [isSaved, setIsSaved] = useState(false);
+    const isSavedRef = useRef(false);
     // Rematch State
     const [rematchRequested, setRematchRequested] = useState(false); // We sent request
     const [rematchIncoming, setRematchIncoming] = useState<{ requestedBy: number; expiresAt: Date } | null>(null); // Opponent sent request
@@ -86,6 +87,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
             if (mode === 'ai' && !isSaved) {
                 const pgn = game.pgn();
                 setIsSaved(true);
+                isSavedRef.current = true;
                 gameApi.saveGameResult({
                     mode: 'ai',
                     winnerColor,
@@ -106,6 +108,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 
                 // Only let one client or both send it, server handles idempotency.
                 setIsSaved(true);
+                isSavedRef.current = true;
                 socket.emit('game_end', {
                     roomId,
                     winnerColor, // 'w' | 'b' | undefined
@@ -114,7 +117,11 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
             }
 
         } else {
-            setGameStatus('');
+            // Only clear game status if the game hasn't been ended by server
+            // (resign/draw don't trigger chess.js isGameOver, but server sends game_ended)
+            if (!isSaved) {
+                setGameStatus('');
+            }
         }
     }, [game, userColor, mode, isSaved, socket, roomId]);
 
@@ -170,7 +177,8 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 
                 // If we already saved/handled this game locally, do not re-open the modal
                 // This prevents "Ghost Modal" when opponent refreshes and re-triggers game_end
-                if (isSaved) return;
+                // Using ref to avoid stale closure (useEffect deps don't include isSaved)
+                if (isSavedRef.current) return;
 
                 let winner: 'w' | 'b' | 'draw' = 'draw';
                 if (data.result === '1-0') winner = 'w';
@@ -183,6 +191,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                      setGameStatus(isUserWinner ? 'You Win! (Online)' : 'You Lose! (Online)');
                 }
                 setIsSaved(true); // Stop local logic from trying to save again
+                isSavedRef.current = true;
             });
 
             // Rematch Listeners
@@ -208,6 +217,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 setCurrentMoveIndex(0);
                 setGameStatus('');
                 setIsSaved(false);
+                isSavedRef.current = false;
                 setRematchRequested(false);
                 setRematchIncoming(null);
                 rematchIncomingRef.current = null;
@@ -236,6 +246,39 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 rematchIncomingRef.current = null;
             });
 
+            // Draw Offer Listeners
+            socket.on('draw_offered', () => {
+                toast((t) => (
+                    <div className="flex flex-col gap-2">
+                        <span className="font-semibold">Opponent offered a draw</span>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => {
+                                    socket.emit('accept_draw', { roomId });
+                                    toast.dismiss(t.id);
+                                }}
+                                className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-500"
+                            >
+                                Accept
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    socket.emit('decline_draw', { roomId });
+                                    toast.dismiss(t.id);
+                                }}
+                                className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-500"
+                            >
+                                Decline
+                            </button>
+                        </div>
+                    </div>
+                ), { duration: 10000, position: 'top-center' });
+            });
+
+            socket.on('draw_declined', () => {
+                toast.error('Draw offer declined');
+            });
+
             socket.on('game_start', (data: { 
                 color: 'w' | 'b', 
                 fen?: string, 
@@ -259,6 +302,10 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                     const isWhite = data.color === 'w';
                     const opp = isWhite ? data.players.black : data.players.white;
                     if (opp) setOpponent(opp);
+                } else {
+                    // Fallback: game_start means both players are present
+                    // Set generic opponent if server didn't include player info
+                    setOpponent(prev => prev || { username: 'Opponent' });
                 }
                 
                 // Always stop waiting when game starts
@@ -360,10 +407,11 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 socket.off('rematch_requested');
                 socket.off('game_restarted');
                 socket.off('rematch_declined');
-                socket.off('rematch_declined');
                 socket.off('player_joined');
                 socket.off('player_left');
                 socket.off('game_ready');
+                socket.off('draw_offered');
+                socket.off('draw_declined');
                 socket.off('error');
                 
                 // Notify server that we are leaving the room
@@ -495,8 +543,8 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
         // Prevent moves if reviewing past history
         if (currentMoveIndex !== history.length - 1) return false;
         
-        // Prevent moves if it's not user's turn or game is over
-        if (game.turn() !== userColor || game.isGameOver()) return false;
+        // Prevent moves if it's not user's turn, game is over, or game was ended by server
+        if (game.turn() !== userColor || game.isGameOver() || isSaved) return false;
 
         const piece = game.get(sourceSquare as any);
         const isPromotion = 
@@ -533,6 +581,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
         setCurrentMoveIndex(0);
         setGameStatus('');
         setIsSaved(false);
+        isSavedRef.current = false;
         if (randomizeColor && mode === 'ai') {
              setUserColor(Math.random() < 0.5 ? 'w' : 'b');
         }
@@ -576,7 +625,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
 
     // Resign / Draw Handlers
     const handleResign = () => {
-        if (mode === 'online' && socket && roomId) {
+        if (mode === 'online' && socket && roomId && !game.isGameOver() && !isSaved) {
             if (confirm("Are you sure you want to resign?")) {
                 socket.emit('resign_game', { roomId });
             }
@@ -584,9 +633,9 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
     };
 
     const handleOfferDraw = () => {
-         if (mode === 'online' && socket && roomId) {
+         if (mode === 'online' && socket && roomId && !game.isGameOver() && !isSaved) {
              socket.emit('offer_draw', { roomId });
-             toast.success('Draw offered sent');
+             toast.success('Draw offer sent');
          }
     };
 
@@ -723,12 +772,12 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                             customDarkSquareStyle={{ backgroundColor: '#769656' }}
                             customLightSquareStyle={{ backgroundColor: '#eeeed2' }}
                             animationDuration={200}
-                            arePiecesDraggable={!isWaitingForOpponent && currentMoveIndex === history.length - 1 && game.turn() === userColor}
+                            arePiecesDraggable={!isWaitingForOpponent && Boolean(opponent) && currentMoveIndex === history.length - 1 && game.turn() === userColor && !game.isGameOver() && !isSaved}
                         />
                     )}
                     
                     {/* Waiting For Opponent Overlay (Only show if Verified and Waiting) */}
-                    {isRoomVerified && isWaitingForOpponent && !gameStatus && (
+                    {isRoomVerified && isWaitingForOpponent && !gameStatus && !isSaved && (
                         <div className="absolute inset-0 z-40 bg-black/50 backdrop-blur-sm flex flex-col items-center justify-center text-white animate-in fade-in duration-500">
                              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mb-4"></div>
                              <h3 className="text-xl font-bold">Waiting for opponent...</h3>
@@ -817,7 +866,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 </div>
 
                 {/* Resign / Draw Controls for Online Mode */}
-                {mode === 'online' && !gameStatus && (
+                {mode === 'online' && !gameStatus && !isSaved && (
                     <div className="p-3 border-t border-white/10 flex gap-2">
                         <button 
                             onClick={handleOfferDraw}
