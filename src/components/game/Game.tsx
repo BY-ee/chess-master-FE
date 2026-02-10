@@ -52,18 +52,22 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
     const socket = useSocket();
     const navigate = useNavigate();
 
-    // Refs for keyboard handling to avoid stale closures
+    // Refs for keyboard handling and socket callbacks to avoid stale closures
     const gameRef = useRef(game);
     const historyRef = useRef(history);
     const indexRef = useRef(currentMoveIndex);
     const userColorRef = useRef(userColor);
+    const socketRef = useRef(socket);
+    const roomIdRef = useRef(roomId);
 
     useEffect(() => {
         gameRef.current = game;
         historyRef.current = history;
         indexRef.current = currentMoveIndex;
         userColorRef.current = userColor;
-    }, [game, history, currentMoveIndex, userColor]);
+        socketRef.current = socket;
+        roomIdRef.current = roomId;
+    }, [game, history, currentMoveIndex, userColor, socket, roomId]);
 
     // Check Game Status
     useEffect(() => {
@@ -84,7 +88,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
             setGameStatus(status);
 
             // Save Game Result (AI Mode only - Online handled by server)
-            if (mode === 'ai' && !isSaved) {
+            if (mode === 'ai' && !isSavedRef.current) {
                 const pgn = game.pgn();
                 setIsSaved(true);
                 isSavedRef.current = true;
@@ -100,7 +104,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 }).catch((err) => {
                     console.error('Failed to save game', err);
                 });
-            } else if (mode === 'online' && socket && roomId && !isSaved) {
+            } else if (mode === 'online' && socket && roomId && !isSavedRef.current) {
                 // Determine if WE should report the result. usually both clients might emit, or just the winner, or server detects it.
                 // Assuming server trusts client for now or validates moves.
                 // Better approach: Server detects checkmate/draw from move stream. 
@@ -119,11 +123,11 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
         } else {
             // Only clear game status if the game hasn't been ended by server
             // (resign/draw don't trigger chess.js isGameOver, but server sends game_ended)
-            if (!isSaved) {
+            if (!isSavedRef.current) {
                 setGameStatus('');
             }
         }
-    }, [game, userColor, mode, isSaved, socket, roomId]);
+    }, [game, userColor, mode, socket, roomId]);
 
     // Socket Listeners (Online Mode)
     useEffect(() => {
@@ -134,16 +138,27 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
             socket.emit('join_game', { roomId });
 
             // New Events for Synchronized Start
-            socket.on('player_joined', (data: { username: string, currentPlayers: number }) => {
+            socket.on('player_joined', (data: { 
+                username: string, 
+                currentPlayers: number,
+                existingPlayers?: { username: string; rating?: number }[], // Backend may include existing room members
+                rating?: number // Rating of the joining player
+            }) => {
                 console.log('Player joined:', data);
                 setIsRoomVerified(true); // Valid room response
                 toast(`Player ${data.username} joined! (${data.currentPlayers}/2)`);
                 
-                // If it's not us (assuming we know our name, or simplistically just set it as opponent if we are waiting)
-                // Better: Check against current user
-                 if (user && data.username !== user.username) {
-                     setOpponent({ username: data.username });
-                 }
+                if (user && data.username !== user.username) {
+                    // Another player joined → they are our opponent
+                    setOpponent({ username: data.username, rating: data.rating });
+                } else if (user && data.username === user.username) {
+                    // This is our own join confirmation
+                    // Try to identify existing opponent from server-provided list
+                    if (data.existingPlayers) {
+                        const opp = data.existingPlayers.find(p => p.username !== user.username);
+                        if (opp) setOpponent({ username: opp.username, rating: opp.rating });
+                    }
+                }
             });
 
             socket.on('player_left', (data: { username: string, currentPlayers: number }) => {
@@ -155,11 +170,25 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 }
             });
 
-            socket.on('game_ready', (data: { whiteId: number; blackId: number }) => {
+            socket.on('game_ready', (data: { 
+                whiteId: number; 
+                blackId: number;
+                players?: {
+                    white: { username: string; rating?: number };
+                    black: { username: string; rating?: number };
+                };
+            }) => {
                 console.log('Game Ready!', data);
                 setIsRoomVerified(true); // Valid room response
                 setIsWaitingForOpponent(false);
                 toast.success('Game Started! Good luck.');
+                
+                // Try to set opponent from game_ready data if not already set
+                if (data.players && user) {
+                    const isWhite = String(data.whiteId) === String(user.id);
+                    const opp = isWhite ? data.players.black : data.players.white;
+                    if (opp) setOpponent(prev => prev || opp);
+                }
             });
 
 
@@ -208,7 +237,14 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 }
             });
 
-            socket.on('game_restarted', (data: { whiteId: number; blackId: number }) => {
+            socket.on('game_restarted', (data: { 
+                whiteId: number; 
+                blackId: number;
+                players: {
+                    white: { username: string; rating?: number };
+                    black: { username: string; rating?: number };
+                };
+            }) => {
                 console.log('Game restarted!', data);
                 // Reset game locally
                 const newGame = new Chess();
@@ -225,6 +261,17 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 setIsRematchExpired(false);
                 setRematchCooldown(0);
                 setIsWaitingForOpponent(false); // Ensure waiting overlay is gone on restart
+
+                // Update color and opponent info from rematch (colors may have swapped)
+                if (user && data.players) {
+                    const isWhite = String(data.whiteId) === String(user.id);
+                    const newColor = isWhite ? 'w' : 'b';
+                    setUserColor(newColor);
+                    userColorRef.current = newColor;
+                    
+                    const opp = isWhite ? data.players.black : data.players.white;
+                    if (opp) setOpponent(opp);
+                }
             });
 
             socket.on('rematch_declined', (data: { declinedBy: number }) => {
@@ -254,7 +301,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                         <div className="flex gap-2">
                             <button 
                                 onClick={() => {
-                                    socket.emit('accept_draw', { roomId });
+                                    socketRef.current?.emit('accept_draw', { roomId: roomIdRef.current });
                                     toast.dismiss(t.id);
                                 }}
                                 className="px-3 py-1 bg-green-600 text-white rounded text-sm hover:bg-green-500"
@@ -263,7 +310,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                             </button>
                             <button 
                                 onClick={() => {
-                                    socket.emit('decline_draw', { roomId });
+                                    socketRef.current?.emit('decline_draw', { roomId: roomIdRef.current });
                                     toast.dismiss(t.id);
                                 }}
                                 className="px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-500"
@@ -492,7 +539,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
              if (!isMounted) return;
 
              try {
-                 const bestMoveUci = await stockfish.getBestMove(game.fen(), depth);
+                 const bestMoveUci = await stockfish.getBestMove(gameRef.current.fen(), depth);
                  if (isMounted && bestMoveUci) {
                      // Convert UCI to move object for chess.js to ensure validity
                      const from = bestMoveUci.substring(0, 2);
@@ -587,6 +634,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
         }
         setRematchRequested(false);
         setRematchIncoming(null);
+        rematchIncomingRef.current = null;
     };
 
     const handleRematchRequest = () => {
@@ -747,13 +795,15 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                         )}
                     </div>
 
-                    <button 
-                        onClick={() => resetGame(true)}
-                        className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors font-medium text-sm"
-                    >
-                        <RefreshCw size={16} />
-                        New Game
-                    </button>
+                    {mode === 'ai' && (
+                        <button 
+                            onClick={() => resetGame(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors font-medium text-sm"
+                        >
+                            <RefreshCw size={16} />
+                            New Game
+                        </button>
+                    )}
                 </div>
 
                 <div className="w-full aspect-square shadow-2xl rounded-lg overflow-hidden border-4 border-zinc-800 relative">
@@ -794,7 +844,7 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
                 </div>
 
                 {/* Navigation Controls */}
-                <div className="flex items-center gap-4glass-panel p-2 rounded-xl bg-zinc-800/50">
+                <div className="flex items-center gap-4 glass-panel p-2 rounded-xl bg-zinc-800/50">
                     <button 
                         onClick={() => navigateHistory('back')} 
                         disabled={currentMoveIndex === 0}
