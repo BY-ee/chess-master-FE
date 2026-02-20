@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 
 interface User {
-  id: string;
-  username: string;
-  // Add other user fields as needed
+    id: string;
+    username: string;
+    rating?: number;
+    // Add other user fields as needed
 }
 
 interface AuthState {
@@ -14,6 +15,7 @@ interface AuthState {
   setInitializing: (loading: boolean) => void;
   login: (user: User, token: string) => void;
   logout: () => void;
+  updateUser: (updates: Partial<User>) => void;
 }
 
 import { disconnectSocket } from '../socket/socket';
@@ -33,4 +35,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     disconnectSocket();
     set({ user: null, isAuthenticated: false, token: null, isInitializing: false });
   },
+  updateUser: (updates) => set((state) => ({
+    user: state.user ? { ...state.user, ...updates } : null
+  })),
 }));

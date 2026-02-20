@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { X, Home, Gamepad2, LogOut, List, ChevronDown, ChevronRight, type LucideIcon, Bot, Users } from 'lucide-react';
+import { X, Home, Gamepad2, LogOut, List, ChevronDown, ChevronRight, type LucideIcon, Bot, Users, Trophy } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useState } from 'react';
 
@@ -142,8 +142,17 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                                 {user.username.charAt(0).toUpperCase()}
                             </div>
                             <div className="overflow-hidden min-w-0">
-                                <p className="text-sm font-medium text-white truncate">{user.username}</p>
-                                <p className="text-xs text-zinc-400">Online</p>
+
+                                <div className="flex flex-col gap-1">
+                                    <p className="text-sm font-medium text-white truncate">{user.username}</p>
+                                    <p className="text-xs text-zinc-400">Online</p>
+                                    {user.rating !== undefined && (
+                                        <div className="flex items-center gap-1.5 text-xs text-zinc-300">
+                                            <Trophy size={12} className="text-yellow-500" />
+                                            <span className="font-mono text-yellow-500 font-semibold">{user.rating}</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}

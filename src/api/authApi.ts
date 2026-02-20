@@ -13,6 +13,7 @@ export interface UserProfile {
   id: string;
   username: string;
   email?: string;
+  rating?: number;
 }
 
 export interface LoginResponse {

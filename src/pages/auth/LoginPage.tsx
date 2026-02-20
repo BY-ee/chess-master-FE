@@ -20,7 +20,7 @@ const LoginPage = () => {
         try {
             const token = await authApi.login({ username, password });
             const user = await authApi.getMe(token);
-            login({ id: user.id, username: user.username }, token);
+            login({ id: user.id, username: user.username, rating: user.rating }, token);
             navigate('/lobby');
         } catch (err: any) {
             console.error('Login failed:', err);

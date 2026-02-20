@@ -5,6 +5,7 @@ import { Socket } from 'socket.io-client';
 import { Chess } from 'chess.js';
 import { SOCKET_EVENTS } from '../constants';
 import type { RatingChanges } from '../types';
+import { useAuthStore } from '../../../store/useAuthStore';
 
 interface GameControl {
     gameRef: React.MutableRefObject<Chess>;
@@ -25,6 +26,7 @@ interface GameControl {
 interface User {
     id: string;
     username: string;
+    rating?: number;
 }
 
 export const useGameSocket = (
@@ -62,6 +64,14 @@ export const useGameSocket = (
     const [isRematchExpired, setIsRematchExpired] = useState(false);
     const [rematchCooldown, setRematchCooldown] = useState(0);
     const [ratingChanges, setRatingChanges] = useState<RatingChanges | null>(null);
+    const updateUser = useAuthStore((state) => state.updateUser);
+
+    const matchUser = user;
+    const userRef = useRef(matchUser);
+
+    useEffect(() => {
+        userRef.current = matchUser;
+    }, [matchUser]);
 
     const roomIdRef = useRef(roomId);
     
@@ -134,6 +144,13 @@ export const useGameSocket = (
             
             if (data.ratingChanges) {
                 setRatingChanges(data.ratingChanges);
+                
+                // Update user rating in global store
+                if (userRef.current && userColorRef.current) {
+                     const userColorFull = userColorRef.current === 'w' ? 'white' : 'black';
+                     const newRating = data.ratingChanges[userColorFull].new;
+                     updateUser({ rating: newRating });
+                }
             }
 
             setIsSaved(true);
@@ -165,6 +182,7 @@ export const useGameSocket = (
             setGameStatus('');
             setIsSaved(false);
             isSavedRef.current = false;
+            setRatingChanges(null);
             
             // Rematch state reset
             setRematchRequested(false);
@@ -275,6 +293,23 @@ export const useGameSocket = (
                     setGame(newGame);
                     setHistory(reconstructedHistory);
                     setCurrentMoveIndex(reconstructedHistory.length - 1);
+
+                    // If game is already over when joining/connected, mark as saved to prevent re-emission
+                    if (newGame.isGameOver()) {
+                        setIsSaved(true);
+                        isSavedRef.current = true;
+                        
+                        // Set initial status based on result if available
+                        // We might not have the result directly here unless passed in data
+                        // But we can infer draw/checkmate state
+                         if (newGame.isCheckmate()) {
+                             const winner = newGame.turn() === 'w' ? 'b' : 'w';
+                             const isUserWinner = winner === userColorRef.current;
+                             setGameStatus(isUserWinner ? 'You Win! (Online)' : 'You Lose! (Online)');
+                         } else if (newGame.isDraw() || newGame.isThreefoldRepetition() || newGame.isStalemate() || newGame.isInsufficientMaterial()) {
+                             setGameStatus('Game Over - Draw');
+                         }
+                    }
                 } catch (e) {
                     console.error('Failed to load remote state:', e);
                     resetGame(false);
@@ -282,6 +317,7 @@ export const useGameSocket = (
             } else {
                 resetGame(false);
             }
+            setRatingChanges(null);
         };
 
         const handleError = (error: any) => {
