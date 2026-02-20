@@ -134,8 +134,6 @@ export const useGameSocket = (
         };
 
         const handleGameEnded = (data: { result: '1-0' | '0-1' | '1/2-1/2'; saved: boolean; ratingChanges?: RatingChanges }) => {
-            console.log('Game ended event received:', data);
-            console.log('Current user ref:', userRef.current);
             if (isSavedRef.current) return;
 
             let winner: 'w' | 'b' | 'draw' = 'draw';
@@ -150,8 +148,8 @@ export const useGameSocket = (
             }
             
             
+            
             if (data.ratingChanges) {
-                console.log('Received rating changes:', data.ratingChanges);
                 // Use helper to handle both 'white'/'black' and potentially 'w'/'b' keys
                 const getChange = (changes: any, color: 'w' | 'b') => {
                     return changes[color === 'w' ? 'white' : 'black'] || changes[color];
@@ -178,7 +176,6 @@ export const useGameSocket = (
                 
                 // Update user rating
                 if (myChange?.new !== undefined) {
-                     console.log('Updating user rating to:', myChange.new);
                      updateUser({ rating: myChange.new });
                 } else {
                      console.warn('Could not find user rating change in data', data.ratingChanges);
@@ -186,7 +183,6 @@ export const useGameSocket = (
 
                 // Update opponent rating locally
                 if (oppChange?.new !== undefined) {
-                    console.log('Updating opponent rating to:', oppChange.new);
                     setOpponent(prev => prev ? { ...prev, rating: oppChange.new } : null);
                 } else {
                      // Try to update using opponent reference if state update is tricky inside handler?
@@ -219,7 +215,6 @@ export const useGameSocket = (
         };
 
         const handleGameRestarted = (data: any) => {
-            console.log('Game restarted!', data);
             
             // Reset local game state via hook logic
             // We need to call resetGame but passing false to prevent random color assignment for AI logic (though mode is online here)
@@ -228,9 +223,6 @@ export const useGameSocket = (
             setGame(newGame);
             setHistory([{ fen: newGame.fen(), san: '' }]);
             setCurrentMoveIndex(0);
-            setGameStatus('');
-            setIsSaved(false);
-            isSavedRef.current = false;
             setGameStatus('');
             setIsSaved(false);
             isSavedRef.current = false;
@@ -288,11 +280,10 @@ export const useGameSocket = (
                          
                          const targetColorFull = newColor === 'w' ? 'white' : 'black';
                          
-                         const patchedRating = ratingChangesRef.current[targetColorFull]?.new;
-                         if (patchedRating !== undefined) {
-                            console.log('Patching opponent rating with cached value:', patchedRating);
-                            opp.rating = patchedRating;
-                         }
+                          const patchedRating = ratingChangesRef.current[targetColorFull]?.new;
+                          if (patchedRating !== undefined) {
+                             opp.rating = patchedRating;
+                          }
                     }
                     setOpponent(opp);
                 }
