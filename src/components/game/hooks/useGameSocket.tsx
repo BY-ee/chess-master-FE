@@ -52,8 +52,13 @@ export const useGameSocket = (
 
     // Socket-driven State
     const [opponent, setOpponent] = useState<{ username: string; rating?: number } | null>(null);
+    const opponentRef = useRef<{ username: string; rating?: number } | null>(null);
+    // Sync ref
+    useEffect(() => { opponentRef.current = opponent; }, [opponent]);
+
     const [isWaitingForOpponent, setIsWaitingForOpponent] = useState(mode === 'online');
     const [isRoomVerified, setIsRoomVerified] = useState(mode !== 'online');
+    const hasEmittedEndRef = useRef(false);
     
     // Rematch State
     const [rematchRequested, setRematchRequested] = useState(false);
@@ -64,6 +69,7 @@ export const useGameSocket = (
     const [isRematchExpired, setIsRematchExpired] = useState(false);
     const [rematchCooldown, setRematchCooldown] = useState(0);
     const [ratingChanges, setRatingChanges] = useState<RatingChanges | null>(null);
+    const ratingChangesRef = useRef<RatingChanges | null>(null);
     const updateUser = useAuthStore((state) => state.updateUser);
 
     const matchUser = user;
@@ -129,6 +135,7 @@ export const useGameSocket = (
 
         const handleGameEnded = (data: { result: '1-0' | '0-1' | '1/2-1/2'; saved: boolean; ratingChanges?: RatingChanges }) => {
             console.log('Game ended event received:', data);
+            console.log('Current user ref:', userRef.current);
             if (isSavedRef.current) return;
 
             let winner: 'w' | 'b' | 'draw' = 'draw';
@@ -142,16 +149,58 @@ export const useGameSocket = (
                  setGameStatus(isUserWinner ? 'You Win! (Online)' : 'You Lose! (Online)');
             }
             
+            
             if (data.ratingChanges) {
-                setRatingChanges(data.ratingChanges);
+                console.log('Received rating changes:', data.ratingChanges);
+                // Use helper to handle both 'white'/'black' and potentially 'w'/'b' keys
+                const getChange = (changes: any, color: 'w' | 'b') => {
+                    return changes[color === 'w' ? 'white' : 'black'] || changes[color];
+                };
+
+                const myChange = userColorRef.current ? getChange(data.ratingChanges, userColorRef.current) : null;
+                const oppChange = userColorRef.current ? getChange(data.ratingChanges, userColorRef.current === 'w' ? 'b' : 'w') : null;
+
+                // Normalize for state to ensure 'white'/'black' keys for UI
+                const normalizedChanges = {
+                    white: getChange(data.ratingChanges, 'w'),
+                    black: getChange(data.ratingChanges, 'b')
+                };
                 
-                // Update user rating in global store
-                if (userRef.current && userColorRef.current) {
-                     const userColorFull = userColorRef.current === 'w' ? 'white' : 'black';
-                     const newRating = data.ratingChanges[userColorFull].new;
-                     updateUser({ rating: newRating });
+                // If normalization worked (check for 'white' key existence, even if undefined value? No, check value)
+                if (normalizedChanges.white && normalizedChanges.black) {
+                     setRatingChanges(normalizedChanges as RatingChanges);
+                     ratingChangesRef.current = normalizedChanges as RatingChanges;
+                } else {
+                     // Fallback to raw data if we couldn't normalize cleanly, assume it matches expected shape
+                     setRatingChanges(data.ratingChanges);
+                     ratingChangesRef.current = data.ratingChanges;
                 }
+                
+                // Update user rating
+                if (myChange?.new !== undefined) {
+                     console.log('Updating user rating to:', myChange.new);
+                     updateUser({ rating: myChange.new });
+                } else {
+                     console.warn('Could not find user rating change in data', data.ratingChanges);
+                }
+
+                // Update opponent rating locally
+                if (oppChange?.new !== undefined) {
+                    console.log('Updating opponent rating to:', oppChange.new);
+                    setOpponent(prev => prev ? { ...prev, rating: oppChange.new } : null);
+                } else {
+                     // Try to update using opponent reference if state update is tricky inside handler?
+                     // No, setOpponent functional update is fine.
+                     console.warn('Could not find opponent rating change in data', data.ratingChanges);
+                     // If opponent ref exists, try to force update?
+                     if (opponentRef.current) {
+                         // But functional update handles "prev".
+                     }
+                }
+            } else {
+                console.warn('No rating changes in game ended event');
             }
+
 
             setIsSaved(true);
             isSavedRef.current = true;
@@ -182,7 +231,11 @@ export const useGameSocket = (
             setGameStatus('');
             setIsSaved(false);
             isSavedRef.current = false;
-            setRatingChanges(null);
+            setGameStatus('');
+            setIsSaved(false);
+            isSavedRef.current = false;
+            hasEmittedEndRef.current = false;
+            // setRatingChanges(null); // Moved to end of function to allow patching
             
             // Rematch state reset
             setRematchRequested(false);
@@ -200,8 +253,54 @@ export const useGameSocket = (
                 userColorRef.current = newColor; // Manual sync just in case, though useEffect in useChessGame handles it on next render
                 
                 const opp = isWhite ? data.players.black : data.players.white;
-                if (opp) setOpponent(opp);
+                
+                if (opp) {
+                    // Patch opponent rating using previous game's rating changes if available
+                    // This fixes the issue where server sends stale rating in game_restarted event
+                    if (ratingChangesRef.current && userColorRef.current) {
+                         // Calculate previous opponent color to find their rating change
+                         // Since newColor is swapped from previous game:
+                         // the opponent's color in the previous game is the same as the color they have now? NO.
+                         // Wait.
+                         // Previous Game: Me=White, Opp=Black.
+                         // New Game: Me=Black, Opp=White.
+                         // Opponent is White. Previous Opponent was Black.
+                         // The players switch colors.
+                         
+                         // So if I am now Black, I was previously White.
+                         // Opponent is now White, was previously Black.
+                         // We want the rating change for the opponent.
+                         // The opponent was previously Black.
+                         // So we look for 'black' in ratingChanges.
+                         
+                         // If I am now White, I was previously Black.
+                         // Opponent is now Black, was previously White.
+                         // We want rating change for 'white'.
+                         
+                         // Logic: Look for the color that is NOT my current color? No.
+                         // Look for the color the opponent WAS.
+                         // My New Color: 'b' -> I was 'w'. Opponent was 'b'. -> Look for 'black'.
+                         // My New Color: 'w' -> I was 'b'. Opponent was 'w'. -> Look for 'white'.
+                         
+                         // So look for the color corresponding to My New Color.
+                         // If newColor == 'b', look for 'black'.
+                         // If newColor == 'w', look for 'white'.
+                         
+                         const targetColorFull = newColor === 'w' ? 'white' : 'black';
+                         
+                         const patchedRating = ratingChangesRef.current[targetColorFull]?.new;
+                         if (patchedRating !== undefined) {
+                            console.log('Patching opponent rating with cached value:', patchedRating);
+                            opp.rating = patchedRating;
+                         }
+                    }
+                    setOpponent(opp);
+                }
             }
+             
+             // Clear rating changes ref after use
+             setRatingChanges(null); 
+             ratingChangesRef.current = null;
         };
 
         const handleRematchDeclined = (data: { declinedBy: number }) => {
@@ -255,6 +354,7 @@ export const useGameSocket = (
 
         const handleGameStart = (data: any) => {
             console.log('Game start!', data);
+            hasEmittedEndRef.current = false;
             setIsRoomVerified(true);
             setUserColor(data.color);
             userColorRef.current = data.color;
@@ -410,9 +510,10 @@ export const useGameSocket = (
     };
 
     const emitGameEnd = (winnerColor: 'w' | 'b' | undefined, pgn: string) => {
-        if (mode === 'online' && socket && roomId && !isSavedRef.current) {
-            setIsSaved(true);
-            isSavedRef.current = true;
+        if (mode === 'online' && socket && roomId && !isSavedRef.current && !hasEmittedEndRef.current) {
+            hasEmittedEndRef.current = true;
+            // Note: We DO NOT set setIsSaved(true) here. 
+            // We wait for the server to acknowledge with GAME_ENDED event to prevent ignoring the response.
             socket.emit(SOCKET_EVENTS.GAME_END, { roomId, winnerColor, pgn });
         }
     };

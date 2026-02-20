@@ -66,9 +66,15 @@ const Game = ({ mode, roomId, aiModel }: GameProps) => {
             if (game.isCheckmate()) {
                 winnerColor = game.turn() === 'w' ? 'b' : 'w';
             }
-            emitGameEnd(winnerColor, game.pgn());
+            
+            // Fix duplicate game end events: Only the player who delivered the last move emits
+            // When game is over (checkmate/stalemate), the turn is passed to the player who cannot move.
+            // So if game.turn() !== userColor, it means I made the last move.
+            if (game.turn() !== userColor) {
+                emitGameEnd(winnerColor, game.pgn());
+            }
         }
-    }, [mode, game, isSaved, emitGameEnd]);
+    }, [mode, game, isSaved, userColor, emitGameEnd]);
 
     // 4. Input Handlers
     const onDrop = useCallback((sourceSquare: string, targetSquare: string) => {
